@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Create Subtask{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+    <h1 class="mb-4">Create Subtask</h1>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+
+            <label>Subtask Title</label>
+
+            <input
+                type="text"
+                name="title"
+                class="form-control"
+            required>
+
+        </div>
+
+        <button class="btn btn-primary">
+            Create Subtask
+        </button>
+
+    </form>
+    </div>
+</div>
+{% endblock %}

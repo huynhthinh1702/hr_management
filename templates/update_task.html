@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Update Task{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+    <h1 class="mb-4">Update Task</h1>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+
+            <label>Status</label>
+
+            <select
+                name="status"
+                class="form-control"
+            >
+
+                <option value="Pending" {% if task.status == "Pending" %}selected{% endif %}>
+                    Pending
+                </option>
+
+                <option value="In Progress" {% if task.status == "In Progress" %}selected{% endif %}>
+                    In Progress
+                </option>
+
+                <option value="Completed" {% if task.status == "Completed" %}selected{% endif %}>
+                    Completed
+                </option>
+
+            </select>
+
+        </div>
+
+        <div class="mb-3">
+
+            <label>Progress (%)</label>
+
+            <input
+                type="number"
+                name="progress"
+                class="form-control"
+                value="{{ task.progress }}"
+            >
+
+        </div>
+
+        <button class="btn btn-success">
+            Update
+        </button>
+
+    </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Create Task{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+    <h1 class="mb-4">Create Task</h1>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+
+            <label>Title</label>
+
+            <input
+                type="text"
+                name="title"
+                class="form-control"
+            >
+
+        </div>
+
+        <div class="mb-3">
+
+            <label>Description</label>
+
+            <textarea
+                name="description"
+                class="form-control"
+            ></textarea>
+
+        </div>
+
+        <div class="mb-3">
+
+            <label>Assign Employees</label>
+
+            <select
+                name="assigned_to"
+                class="form-select"
+                multiple
+            >
+
+                {% for user in users %}
+
+                    {% if user.role == "employee" %}
+
+                    <option value="{{ user.id }}">
+                        {{ user.username }}
+                    </option>
+
+                    {% endif %}
+                
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+
+            <label>Deadline</label>
+
+            <input
+                type="date"
+                name="deadline"
+                class="form-control"
+            >
+        </div>
+
+        <div class="mb-3">
+
+            <label>Priority</label>
+
+            <select
+                name="priority"
+                class="form-control"
+            >
+
+                <option value="Low">
+                    Low
+                </option>
+
+                <option value="Medium">
+                    Medium
+                </option>
+
+                <option value="High">
+                    High
+                </option>
+
+            </select>
+
+        </div>
+
+        <button class="btn btn-primary">
+            Create Task
+        </button>
+
+    </form>
+    </div>
+</div>
+{% endblock %}

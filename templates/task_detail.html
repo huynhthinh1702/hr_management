@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Task Detail{% endblock %}
+
+{% block content %}
+<div id="taskDetailPage" data-task-id="{{ task.id }}">
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="flex-grow-1 me-3">
+        <div id="task-live-heading">
+            <h1 class="mb-1" id="live-task-title">{{ task.title }}</h1>
+            <p class="text-muted mb-2 mb-lg-3" id="live-task-description">{{ task.description }}</p>
+            <div id="live-task-meta" class="d-flex flex-wrap gap-2 align-items-center small">
+                <span class="badge rounded-pill bg-secondary" id="live-task-status">{{ task.status }}</span>
+                <span class="text-muted" id="live-task-progress-label">{{ task.progress }}% complete</span>
+                {% if task.deadline %}
+                    <span class="text-muted">Deadline: {{ task.deadline }}</span>
+                {% endif %}
+                {% if task.priority %}
+                    <span class="badge rounded-pill bg-light text-dark border" id="live-task-priority">{{ task.priority }} priority</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <a href="/create-subtask/{{ task.id }}" class="btn btn-primary flex-shrink-0">Add Subtask</a>
+</div>
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4>Subtasks</h4>
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="live-subtasks-tbody">
+                        {% for subtask in subtasks %}
+                        <tr>
+                            <td>{{ subtask.id }}</td>
+                            <td>{{ subtask.title }}</td>
+                            <td>{{ subtask.status }}</td>
+                            <td>{{ subtask.progress }}%</td>
+                            <td>
+                                <a href="/update-subtask/{{ subtask.id }}" class="btn btn-warning btn-sm">Update</a>
+                                <form method="POST" action="/delete-subtask/{{ subtask.id }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="button" class="btn btn-danger btn-sm" data-confirm="Delete this subtask?" data-confirm-ok="Delete" data-confirm-submit="1">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4>Task Comments</h4>
+                <form method="POST" action="/task/{{ task.id }}/comment" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <textarea name="content" class="form-control mb-2" rows="3" placeholder="Write your comment..." required></textarea>
+                    <button class="btn btn-success btn-sm">Post Comment</button>
+                </form>
+                <div id="live-comments">
+                    {% if comments %}
+                        {% for comment in comments %}
+                            <div class="border rounded p-3 mb-2 bg-light">
+                                <div class="d-flex justify-content-between">
+                                    <strong>{{ comment.author_name }}</strong>
+                                <small class="text-muted">{{ comment.created_at | vn_time }}</small>
+                                </div>
+                                <div>{{ comment.content }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No comments yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4>Bug / Issue Tracker</h4>
+                <form method="POST" action="/task/{{ task.id }}/issues" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="title" class="form-control mb-2" placeholder="Issue title" required>
+                    <textarea name="description" class="form-control mb-2" rows="3" placeholder="Describe this bug or problem"></textarea>
+                    <button class="btn btn-danger btn-sm">Report Issue</button>
+                </form>
+                <div id="live-issues">
+                    {% if issues %}
+                        {% for issue in issues %}
+                            <div class="border rounded p-3 mb-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-semibold">{{ issue.title }}</div>
+                                    <small class="text-muted">by {{ issue.creator_name }} - {{ issue.created_at | vn_time }}</small>
+                                    </div>
+                                    {% if issue.status == "Resolved" %}
+                                        <span class="badge bg-success">Resolved</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Open</span>
+                                    {% endif %}
+                                </div>
+                                {% if issue.description %}
+                                    <div class="mt-2">{{ issue.description }}</div>
+                                {% endif %}
+                                {% if issue.status != "Resolved" %}
+                                    <form method="POST" action="/issues/{{ issue.id }}/resolve" class="mt-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-outline-success btn-sm">Mark as Resolved</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No issues reported.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4>File Upload</h4>
+                <form method="POST" action="/task/{{ task.id }}/upload" enctype="multipart/form-data" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="file" name="file" class="form-control mb-2" required>
+                    <button class="btn btn-primary btn-sm">Upload File</button>
+                </form>
+                <div id="live-attachments-wrap">
+                    <ul class="list-group list-group-flush" id="live-attachments">
+                        {% if attachments %}
+                            {% for item in attachments %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                    <div>
+                                        <div class="fw-semibold">{{ item.original_filename }}</div>
+                                        <small class="text-muted">by {{ item.uploader_name }}</small>
+                                    </div>
+                                    <a href="/uploads/{{ item.file_path }}" class="btn btn-outline-secondary btn-sm">Download</a>
+                                </li>
+                            {% endfor %}
+                        {% endif %}
+                    </ul>
+                    <p class="text-muted mb-0 {% if attachments %}d-none{% endif %}" id="live-attachments-empty">No files uploaded.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h4>Activity History</h4>
+                <p class="text-muted small d-none mb-2" id="live-activity-sync-note">Live updates show the 5 most recent activities. Reload the page to browse other pages.</p>
+                <div id="live-activities-wrap">
+                    {% if activities %}
+                        <ul class="hr-timeline" id="live-activities">
+                            {% for activity in activities %}
+                                {% set act = (activity.action or '')|lower %}
+                                {% if 'comment' in act %}
+                                    {% set dot = 'hr-dot-comment' %}
+                                    {% set icon = 'bi-chat-dots' %}
+                                {% elif 'upload' in act %}
+                                    {% set dot = 'hr-dot-upload' %}
+                                    {% set icon = 'bi-paperclip' %}
+                                {% elif 'completed' in act %}
+                                    {% set dot = 'hr-dot-complete' %}
+                                    {% set icon = 'bi-check2-circle' %}
+                                {% elif 'issue' in act %}
+                                    {% set dot = 'hr-dot-issue' %}
+                                    {% set icon = 'bi-bug' %}
+                                {% elif 'moved' in act %}
+                                    {% set dot = 'hr-dot-move' %}
+                                    {% set icon = 'bi-arrow-left-right' %}
+                                {% else %}
+                                    {% set dot = 'hr-dot-default' %}
+                                    {% set icon = 'bi-clock-history' %}
+                                {% endif %}
+                                <li class="hr-timeline-item">
+                                    <div class="hr-timeline-dot {{ dot }}"><i class="bi {{ icon }}"></i></div>
+                                    <div class="hr-timeline-body">
+                                        <div class="d-flex justify-content-between align-items-start gap-3">
+                                            <div class="fw-semibold">{{ activity.action }}</div>
+                                            <small class="text-muted text-nowrap">{{ activity.created_at | vn_time }}</small>
+                                        </div>
+                                        <div class="text-muted">{{ activity.details }}</div>
+                                        <div class="small text-muted mt-1">by {{ activity.actor_name }}</div>
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                        <nav class="mt-3" id="live-activity-pagination">
+                            {% if activity_pagination.pages > 1 %}
+                                <ul class="pagination pagination-sm">
+                                    <li class="page-item {% if not activity_pagination.has_prev %}disabled{% endif %}">
+                                        <a class="page-link" href="/task/{{ task.id }}?activity_page={{ activity_pagination.prev_num }}">Prev</a>
+                                    </li>
+                                    {% for page_num in activity_pagination.iter_pages(left_edge=1, left_current=1, right_current=1, right_edge=1) %}
+                                        {% if page_num %}
+                                            <li class="page-item {% if page_num == activity_pagination.page %}active{% endif %}">
+                                                <a class="page-link" href="/task/{{ task.id }}?activity_page={{ page_num }}">{{ page_num }}</a>
+                                            </li>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <li class="page-item {% if not activity_pagination.has_next %}disabled{% endif %}">
+                                        <a class="page-link" href="/task/{{ task.id }}?activity_page={{ activity_pagination.next_num }}">Next</a>
+                                    </li>
+                                </ul>
+                            {% endif %}
+                        </nav>
+                    {% else %}
+                        <p class="text-muted mb-0" id="live-activities-empty">No activity recorded.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/pages/task_detail.js"></script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban Board{% endblock %}
+
+{% block head_extra %}
+<link href="/static/css/pages/kanban.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Kanban Board</h1>
+        <div class="text-muted">Drag & drop tasks between columns.</div>
+    </div>
+    <div class="text-muted small">
+        <i class="bi bi-broadcast"></i> Live updates enabled
+    </div>
+</div>
+
+<div class="kanban-board">
+    <section class="kanban-column">
+        <div class="kanban-column-header">
+            <h2 class="kanban-column-title text-warning mb-0">Pending</h2>
+            <span class="badge text-bg-light border">{{ pending_tasks|length }}</span>
+        </div>
+        <div class="kanban-column-body">
+            <div id="pending-list">
+                {% for task in pending_tasks %}
+                <div class="task-card" data-task-id="{{ task.id }}">
+                    <h5>{{ task.title }}</h5>
+                    <p>{{ task.description }}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-secondary">{{ task.progress }}%</span>
+                        <a href="/task/{{ task.id }}" class="btn btn-sm btn-primary">View</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not pending_tasks %}
+                <div class="text-muted small">No pending tasks.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="kanban-column">
+        <div class="kanban-column-header">
+            <h2 class="kanban-column-title text-primary mb-0">In Progress</h2>
+            <span class="badge text-bg-light border">{{ progress_tasks|length }}</span>
+        </div>
+        <div class="kanban-column-body">
+            <div id="progress-list">
+                {% for task in progress_tasks %}
+                <div class="task-card" data-task-id="{{ task.id }}">
+                    <h5>{{ task.title }}</h5>
+                    <p>{{ task.description }}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-info">{{ task.progress }}%</span>
+                        <a href="/task/{{ task.id }}" class="btn btn-sm btn-primary">View</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not progress_tasks %}
+                <div class="text-muted small">No tasks in progress.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="kanban-column">
+        <div class="kanban-column-header">
+            <h2 class="kanban-column-title text-success mb-0">Completed</h2>
+            <span class="badge text-bg-light border">{{ completed_tasks|length }}</span>
+        </div>
+        <div class="kanban-column-body">
+            <div id="completed-list">
+                {% for task in completed_tasks %}
+                <div class="task-card" data-task-id="{{ task.id }}">
+                    <h5>{{ task.title }}</h5>
+                    <p>{{ task.description }}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-success">{{ task.progress }}%</span>
+                        <a href="/task/{{ task.id }}" class="btn btn-sm btn-primary">View</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not completed_tasks %}
+                <div class="text-muted small">No completed tasks.</div>
+            {% endif %}
+        </div>
+    </section>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="/static/js/pages/kanban.js"></script>
+{% endblock %}
