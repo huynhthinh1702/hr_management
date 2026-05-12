@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Admin User Management{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Admin User Management</h1>
+        <div class="text-muted">Manage user profile data, roles, account status, and passwords.</div>
+    </div>
+</div>
+
+<form method="GET" class="row g-2 mb-4">
+    <div class="col-md-5">
+        <input type="search" name="search" class="form-control" placeholder="Search fullname, username, or email..." value="{{ request.args.get('search', '') }}">
+    </div>
+    <div class="col-md-2">
+        <select name="role" class="form-select">
+            <option value="">All roles</option>
+            {% for role in ["employee", "manager", "admin", "team_lead", "qa", "director"] %}
+                <option value="{{ role }}" {% if request.args.get('role') == role %}selected{% endif %}>{{ role }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="status" class="form-select">
+            <option value="">All status</option>
+            <option value="active" {% if request.args.get('status') == 'active' %}selected{% endif %}>Active</option>
+            <option value="locked" {% if request.args.get('status') == 'locked' %}selected{% endif %}>Locked</option>
+        </select>
+    </div>
+    <div class="col-md-3 d-flex gap-2">
+        <button class="btn btn-primary flex-fill">Apply</button>
+        <a href="/admin/users" class="btn btn-outline-secondary flex-fill">Reset</a>
+    </div>
+</form>
+
+<div class="table-responsive bg-white border shadow-sm admin-users-table">
+    <table class="table table-hover align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Fullname</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.full_name or "" }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td><span class="badge text-bg-light border">{{ user.role }}</span></td>
+                <td>
+                    {% if user.is_locked %}
+                        <span class="badge text-bg-danger">Locked</span>
+                    {% else %}
+                        <span class="badge text-bg-success">Active</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#editUser{{ user.id }}">{{ _('Edit') }}</button>
+                        <form method="POST" action="/admin/users/{{ user.id }}/toggle-lock">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-outline-warning btn-sm">{{ _('Unlock') if user.is_locked else _('Lock') }}</button>
+                        </form>
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#resetUser{{ user.id }}">{{ _('Reset Password') }}</button>
+                        <form method="POST" action="/admin/users/{{ user.id }}/delete">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="button" class="btn btn-outline-danger btn-sm" data-confirm="{{ _('Delete this user account?') }}" data-confirm-ok="{{ _('Delete') }}" data-confirm-submit="1" data-i18n="Delete">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            <tr class="collapse" id="editUser{{ user.id }}">
+                <td colspan="6">
+                    <form method="POST" action="/admin/users/{{ user.id }}/edit" class="row g-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-md-3"><input name="full_name" class="form-control" value="{{ user.full_name or '' }}" placeholder="Fullname"></div>
+                        <div class="col-md-2"><input name="username" class="form-control" value="{{ user.username }}" placeholder="Username" required></div>
+                        <div class="col-md-3"><input type="email" name="email" class="form-control" value="{{ user.email }}" placeholder="Email" required></div>
+                        <div class="col-md-2">
+                            <select name="role" class="form-select">
+                                {% for role in ["employee", "manager", "admin", "team_lead", "qa", "director"] %}
+                                    <option value="{{ role }}" {% if user.role == role %}selected{% endif %}>{{ role }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2"><button class="btn btn-success w-100">Save</button></div>
+                    </form>
+                </td>
+            </tr>
+            <tr class="collapse" id="resetUser{{ user.id }}">
+                <td colspan="6">
+                    <form method="POST" action="/admin/users/{{ user.id }}/reset-password" class="row g-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-md-9">
+                            <input class="form-control" value="Default password: Hr@12345" disabled>
+                        </div>
+                        <div class="col-md-3"><button class="btn btn-secondary w-100">Reset Password</button></div>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">No users found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

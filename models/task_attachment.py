@@ -13,5 +13,6 @@ class TaskAttachment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     task_id = db.Column(db.Integer, nullable=False)
+    subtask_id = db.Column(db.Integer, nullable=True)
     uploaded_by = db.Column(db.Integer, nullable=False)
     uploader_name = db.Column(db.String(100), nullable=False)

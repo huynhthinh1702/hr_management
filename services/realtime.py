@@ -17,8 +17,11 @@ def emit_global(socketio, kind="data_changed", task_id=None):
     socketio.emit("global_changed", payload, room="global")
 
 
-def emit_task_live(socketio, task_id):
-    socketio.emit("task_live_update", {"task_id": task_id}, room=f"task_{task_id}")
+def emit_task_live(socketio, task_id, sections=None):
+    payload = {"task_id": task_id}
+    if sections:
+        payload["sections"] = sections
+    socketio.emit("task_live_update", payload, room=f"task_{task_id}")
 
 
 def emit_task_removed(socketio, task_id):

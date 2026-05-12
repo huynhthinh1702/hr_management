@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Archived Tasks') }}{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <h2 class="mb-4" data-i18n="Archived Tasks">Archived Tasks</h2>
+
+    <div class="table-responsive">
+        <table class="table table-bordered">
+
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th data-i18n="Title">Title</th>
+                    <th data-i18n="Deleted By">Deleted By</th>
+                    <th data-i18n="Deleted At">Deleted At</th>
+                    <th data-i18n="Reason">Reason</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for task in tasks %}
+                <tr>
+                    <td>{{ task.id }}</td>
+                    <td>{{ task.title }}</td>
+                    <td>{{ task.deleted_by }}</td>
+                    <td>{{ task.deleted_at | vn_time }}</td>
+                    <td>{{ task.delete_reason }}</td>
+                </tr>
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+    </div>
+</div>
+
+{% endblock %}

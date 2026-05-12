@@ -12,6 +12,10 @@
     return div.innerHTML;
   }
 
+  function tr(text) {
+    return window.HR_UI && window.HR_UI.t ? window.HR_UI.t(text) : text;
+  }
+
   function renderCard(t, badgeClass) {
     return (
       '<div class="task-card" data-task-id="' +
@@ -31,7 +35,9 @@
       "%</span>" +
       '<a href="/task/' +
       t.id +
-      '" class="btn btn-sm btn-primary">View</a>' +
+      '" class="btn btn-sm btn-primary">' +
+      tr("View") +
+      "</a>" +
       "</div>" +
       "</div>"
     );
@@ -67,7 +73,7 @@
     })
       .then(() => {
         if (window.HR_UI && typeof window.HR_UI.toast === "function") {
-          window.HR_UI.toast("Moved task to " + statusName + ".", { title: "Kanban", variant: "success" });
+          window.HR_UI.toast(tr("Task moved successfully."), { title: tr("Kanban"), variant: "success" });
         }
       })
       .catch(() => {});

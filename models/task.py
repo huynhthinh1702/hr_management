@@ -1,4 +1,5 @@
 from database import db
+from datetime import datetime
 
 task_users = db.Table(
     "task_users",
@@ -31,6 +32,45 @@ class Task(db.Model):
     deadline = db.Column(db.String(50))
 
     priority = db.Column(db.String(20))
+
+    # =========================
+    # DELETE SYSTEM
+    # =========================
+
+    is_deleted = db.Column(
+        db.Boolean,
+        default=False
+    )
+
+    deleted_at = db.Column(
+        db.DateTime,
+        nullable=True
+    )
+
+    deleted_by = db.Column(
+        db.String(100),
+        nullable=True
+    )
+
+    delete_reason = db.Column(
+        db.Text,
+        nullable=True
+    )
+
+    delete_request_status = db.Column(
+        db.String(30),
+        default="none"
+    )
+
+    delete_requested_by = db.Column(
+        db.String(100),
+        nullable=True
+    )
+
+    delete_requested_at = db.Column(
+        db.DateTime,
+        nullable=True
+    )
 
     assigned_users = db.relationship(
         "User",

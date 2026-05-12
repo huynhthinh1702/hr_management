@@ -11,3 +11,18 @@ class SubTask(db.Model):
     progress = db.Column(db.Integer)
 
     task_id = db.Column(db.Integer)
+
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("user.id"),
+        nullable=True,
+    )
+
+    assigned_to = db.Column(
+        db.Integer,
+        db.ForeignKey("user.id"),
+        nullable=True
+    )
+
+    assigned_user = db.relationship("User", foreign_keys=[assigned_to])
+    creator = db.relationship("User", foreign_keys=[created_by])

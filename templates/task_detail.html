@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Task Detail{% endblock %}
+{% block title %}{{ _('Task Detail') }}{% endblock %}
 
 {% block content %}
 <div id="taskDetailPage" data-task-id="{{ task.id }}">
@@ -11,45 +11,68 @@
             <p class="text-muted mb-2 mb-lg-3" id="live-task-description">{{ task.description }}</p>
             <div id="live-task-meta" class="d-flex flex-wrap gap-2 align-items-center small">
                 <span class="badge rounded-pill bg-secondary" id="live-task-status">{{ task.status }}</span>
-                <span class="text-muted" id="live-task-progress-label">{{ task.progress }}% complete</span>
+                <span class="text-muted" id="live-task-progress-label"><span class="pct">{{ task.progress }}</span>% <span data-i18n="complete">complete</span></span>
                 {% if task.deadline %}
-                    <span class="text-muted">Deadline: {{ task.deadline }}</span>
+                    <span class="text-muted"><span data-i18n="Deadline">Deadline</span>: {{ task.deadline }}</span>
                 {% endif %}
                 {% if task.priority %}
-                    <span class="badge rounded-pill bg-light text-dark border" id="live-task-priority">{{ task.priority }} priority</span>
+                    <span class="badge rounded-pill bg-light text-dark border" id="live-task-priority">{% if task.priority == "High" %}High priority{% elif task.priority == "Medium" %}Medium priority{% else %}Low priority{% endif %}</span>
                 {% endif %}
             </div>
+            <form method="POST" action="/update-task/{{ task.id }}" class="d-flex flex-wrap align-items-center gap-2 mt-3" id="task-status-form" data-task-status-form>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="progress" id="live-task-progress-input" value="{{ task.progress }}">
+                <label for="task-status-select" class="small text-muted mb-0" data-i18n="Status">Status</label>
+                <select class="form-select form-select-sm w-auto" id="task-status-select" name="status" data-task-status-select>
+                    <option value="Pending" {% if task.status == "Pending" %}selected{% endif %} data-i18n="Pending">Pending</option>
+                    <option value="In Progress" {% if task.status == "In Progress" %}selected{% endif %} data-i18n="In Progress">In Progress</option>
+                    <option value="Completed" {% if task.status == "Completed" %}selected{% endif %} data-i18n="Completed">Completed</option>
+                </select>
+                <button class="btn btn-outline-primary btn-sm" type="submit" data-i18n="Update Status">Update Status</button>
+            </form>
         </div>
     </div>
-    <a href="/create-subtask/{{ task.id }}" class="btn btn-primary flex-shrink-0">Add Subtask</a>
+    <a href="/create-subtask/{{ task.id }}" class="btn btn-primary flex-shrink-0" data-i18n="Add Subtask">Add Subtask</a>
 </div>
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
-                <h4>Subtasks</h4>
+                <h4 data-i18n="Subtasks">Subtasks</h4>
                 <table class="table table-bordered">
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Title</th>
-                            <th>Status</th>
-                            <th>Progress</th>
-                            <th>Action</th>
+                            <th data-i18n="Title">Title</th>
+                            <th data-i18n="Status">Status</th>
+                            <th data-i18n="Progress">Progress</th>
+                            <th>Assigned To</th>
+                            <th data-i18n="Action">Action</th>
                         </tr>
                     </thead>
                     <tbody id="live-subtasks-tbody">
                         {% for subtask in subtasks %}
                         <tr>
                             <td>{{ subtask.id }}</td>
-                            <td>{{ subtask.title }}</td>
+                            <td>
+                                <a href="/subtask/{{ subtask.id }}" class="text-decoration-none">
+                                    {{ subtask.title }}
+                                </a>
+                                <span class="badge bg-info ms-2">Subtask</span>
+                            </td>
                             <td>{{ subtask.status }}</td>
                             <td>{{ subtask.progress }}%</td>
                             <td>
-                                <a href="/update-subtask/{{ subtask.id }}" class="btn btn-warning btn-sm">Update</a>
+                                {% if subtask.assigned_user %}
+                                    {{ subtask.assigned_user.full_name or subtask.assigned_user.username }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="/subtask/{{ subtask.id }}" class="btn btn-primary btn-sm" data-i18n="View">View</a>
+                                <a href="/update-subtask/{{ subtask.id }}" class="btn btn-warning btn-sm" data-i18n="Update">Update</a>
                                 <form method="POST" action="/delete-subtask/{{ subtask.id }}" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="button" class="btn btn-danger btn-sm" data-confirm="Delete this subtask?" data-confirm-ok="Delete" data-confirm-submit="1">Delete</button>
+                                    <button type="button" class="btn btn-danger btn-sm" data-confirm="{{ _('Delete this subtask?') }}" data-confirm-ok="{{ _('Delete') }}" data-confirm-submit="1" data-i18n="Delete">Delete</button>
                                 </form>
                             </td>
                         </tr>
@@ -61,11 +84,11 @@
 
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
-                <h4>Task Comments</h4>
-                <form method="POST" action="/task/{{ task.id }}/comment" class="mb-3">
+                <h4 data-i18n="Task Comments">Task Comments</h4>
+                <form method="POST" action="/task/{{ task.id }}/comment" class="mb-3" data-ajax-form data-success-sections="comments,activities" data-success-message="{{ _('Comment added.') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <textarea name="content" class="form-control mb-2" rows="3" placeholder="Write your comment..." required></textarea>
-                    <button class="btn btn-success btn-sm">Post Comment</button>
+                    <button class="btn btn-success btn-sm" data-i18n="Post Comment">Post Comment</button>
                 </form>
                 <div id="live-comments">
                     {% if comments %}
@@ -79,7 +102,7 @@
                             </div>
                         {% endfor %}
                     {% else %}
-                        <p class="text-muted mb-0">No comments yet.</p>
+                        <p class="text-muted mb-0" data-i18n="No comments yet.">No comments yet.</p>
                     {% endif %}
                 </div>
             </div>
@@ -87,12 +110,17 @@
 
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
-                <h4>Bug / Issue Tracker</h4>
-                <form method="POST" action="/task/{{ task.id }}/issues" class="mb-3">
+                <h4 data-i18n="Bug / Issue Tracker">Bug / Issue Tracker</h4>
+                <form method="POST" action="/task/{{ task.id }}/issues" class="mb-3" data-ajax-form data-success-sections="issues,activities" data-success-message="{{ _('Issue reported.') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="title" class="form-control mb-2" placeholder="Issue title" required>
+                    <select name="severity" class="form-select mb-2">
+                        <option value="Normal" data-i18n="Normal">Normal</option>
+                        <option value="High" data-i18n="High">High</option>
+                        <option value="Critical" data-i18n="Critical">Critical</option>
+                    </select>
                     <textarea name="description" class="form-control mb-2" rows="3" placeholder="Describe this bug or problem"></textarea>
-                    <button class="btn btn-danger btn-sm">Report Issue</button>
+                    <button class="btn btn-danger btn-sm" data-i18n="Report Issue">Report Issue</button>
                 </form>
                 <div id="live-issues">
                     {% if issues %}
@@ -101,27 +129,27 @@
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
                                         <div class="fw-semibold">{{ issue.title }}</div>
-                                    <small class="text-muted">by {{ issue.creator_name }} - {{ issue.created_at | vn_time }}</small>
+                                    <small class="text-muted"><span data-i18n="by">by</span> {{ issue.creator_name }} - {{ issue.created_at | vn_time }} - {{ issue.severity or "Normal" }}</small>
                                     </div>
                                     {% if issue.status == "Resolved" %}
-                                        <span class="badge bg-success">Resolved</span>
+                                        <span class="badge bg-success" data-i18n="Resolved">Resolved</span>
                                     {% else %}
-                                        <span class="badge bg-danger">Open</span>
+                                        <span class="badge bg-danger" data-i18n="Open">Open</span>
                                     {% endif %}
                                 </div>
                                 {% if issue.description %}
                                     <div class="mt-2">{{ issue.description }}</div>
                                 {% endif %}
                                 {% if issue.status != "Resolved" %}
-                                    <form method="POST" action="/issues/{{ issue.id }}/resolve" class="mt-2">
+                                    <form method="POST" action="/issues/{{ issue.id }}/resolve" class="mt-2" data-ajax-form data-success-sections="issues,activities" data-success-message="{{ _('Issue resolved.') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button class="btn btn-outline-success btn-sm">Mark as Resolved</button>
+                                        <button class="btn btn-outline-success btn-sm" data-i18n="Mark as Resolved">Mark as Resolved</button>
                                     </form>
                                 {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}
-                        <p class="text-muted mb-0">No issues reported.</p>
+                        <p class="text-muted mb-0" data-i18n="No issues reported.">No issues reported.</p>
                     {% endif %}
                 </div>
             </div>
@@ -131,11 +159,11 @@
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body">
-                <h4>File Upload</h4>
+                <h4 data-i18n="File Upload">File Upload</h4>
                 <form method="POST" action="/task/{{ task.id }}/upload" enctype="multipart/form-data" class="mb-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="file" name="file" class="form-control mb-2" required>
-                    <button class="btn btn-primary btn-sm">Upload File</button>
+                    <button class="btn btn-primary btn-sm" data-i18n="Upload File">Upload File</button>
                 </form>
                 <div id="live-attachments-wrap">
                     <ul class="list-group list-group-flush" id="live-attachments">
@@ -144,23 +172,23 @@
                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                                     <div>
                                         <div class="fw-semibold">{{ item.original_filename }}</div>
-                                        <small class="text-muted">by {{ item.uploader_name }}</small>
+                                        <small class="text-muted"><span data-i18n="by">by</span> {{ item.uploader_name }}</small>
                                     </div>
-                                    <a href="/uploads/{{ item.file_path }}" class="btn btn-outline-secondary btn-sm">Download</a>
+                                    <a href="/uploads/{{ item.file_path }}" class="btn btn-outline-secondary btn-sm" data-i18n="Download">Download</a>
                                 </li>
                             {% endfor %}
                         {% endif %}
                     </ul>
-                    <p class="text-muted mb-0 {% if attachments %}d-none{% endif %}" id="live-attachments-empty">No files uploaded.</p>
+                    <p class="text-muted mb-0 {% if attachments %}d-none{% endif %}" id="live-attachments-empty" data-i18n="No files uploaded.">No files uploaded.</p>
                 </div>
             </div>
         </div>
 
         <div class="card border-0 shadow-sm">
             <div class="card-body">
-                <h4>Activity History</h4>
-                <p class="text-muted small d-none mb-2" id="live-activity-sync-note">Live updates show the 5 most recent activities. Reload the page to browse other pages.</p>
-                <div id="live-activities-wrap">
+                <h4 data-i18n="Activity History">Activity History</h4>
+                <button type="button" class="btn btn-outline-primary btn-sm d-none mb-2" id="live-activity-new-note" data-i18n="New activity available">New activity available</button>
+                <div id="live-activities-wrap" data-activity-page="{{ activity_pagination.page }}">
                     {% if activities %}
                         <ul class="hr-timeline" id="live-activities">
                             {% for activity in activities %}
@@ -192,7 +220,7 @@
                                             <small class="text-muted text-nowrap">{{ activity.created_at | vn_time }}</small>
                                         </div>
                                         <div class="text-muted">{{ activity.details }}</div>
-                                        <div class="small text-muted mt-1">by {{ activity.actor_name }}</div>
+                                        <div class="small text-muted mt-1"><span data-i18n="by">by</span> {{ activity.actor_name }}</div>
                                     </div>
                                 </li>
                             {% endfor %}
@@ -201,23 +229,23 @@
                             {% if activity_pagination.pages > 1 %}
                                 <ul class="pagination pagination-sm">
                                     <li class="page-item {% if not activity_pagination.has_prev %}disabled{% endif %}">
-                                        <a class="page-link" href="/task/{{ task.id }}?activity_page={{ activity_pagination.prev_num }}">Prev</a>
+                                        <a class="page-link" href="/task/{{ task.id }}?activity_page={{ activity_pagination.prev_num }}" data-activity-page-link="{{ activity_pagination.prev_num }}" data-i18n="Prev">Prev</a>
                                     </li>
                                     {% for page_num in activity_pagination.iter_pages(left_edge=1, left_current=1, right_current=1, right_edge=1) %}
                                         {% if page_num %}
                                             <li class="page-item {% if page_num == activity_pagination.page %}active{% endif %}">
-                                                <a class="page-link" href="/task/{{ task.id }}?activity_page={{ page_num }}">{{ page_num }}</a>
+                                                <a class="page-link" href="/task/{{ task.id }}?activity_page={{ page_num }}" data-activity-page-link="{{ page_num }}">{{ page_num }}</a>
                                             </li>
                                         {% endif %}
                                     {% endfor %}
                                     <li class="page-item {% if not activity_pagination.has_next %}disabled{% endif %}">
-                                        <a class="page-link" href="/task/{{ task.id }}?activity_page={{ activity_pagination.next_num }}">Next</a>
+                                        <a class="page-link" href="/task/{{ task.id }}?activity_page={{ activity_pagination.next_num }}" data-activity-page-link="{{ activity_pagination.next_num }}" data-i18n="Next">Next</a>
                                     </li>
                                 </ul>
                             {% endif %}
                         </nav>
                     {% else %}
-                        <p class="text-muted mb-0" id="live-activities-empty">No activity recorded.</p>
+                        <p class="text-muted mb-0" id="live-activities-empty" data-i18n="No activity recorded.">No activity recorded.</p>
                     {% endif %}
                 </div>
             </div>

@@ -1,199 +1,450 @@
 {% extends "base.html" %}
 
-{% block title %}Tasks{% endblock %}
+{% block title %}{{ _('Task List') }}{% endblock %}
 
 {% block head_extra %}
 <link href="/static/css/pages/tasks.css" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">Task List</h1>
 
-    {% if session.get("role") == "manager" %}
-    <a href="/create-task" class="btn btn-primary">+ New Task</a>
+<div class="d-flex justify-content-between align-items-center mb-4">
+
+    <h1 class="mb-0" data-i18n="Task List">
+        Task List
+    </h1>
+
+    {% if session.get("role") in ["manager", "director", "team_lead", "admin"] %}
+
+    <a
+        href="/create-task"
+        class="btn btn-primary"
+        data-i18n="+ New Task"
+    >
+        + New Task
+    </a>
+
     {% endif %}
 
 </div>
 
-    <form method="GET" class="row g-2 mb-4">
-         <div class="col-md-5">
-            <input
-                type="text"
-                name="search"
-                class="form-control"
-                placeholder="Search task..."
-                value="{{ request.args.get('search', '') }}"
+<form method="GET" class="row g-2 mb-4">
+
+    <div class="col-md-5">
+
+        <input
+            type="text"
+            name="search"
+            class="form-control"
+            placeholder="Search task..."
+            value="{{ request.args.get('search', '') }}"
+        >
+
+    </div>
+
+    <!-- status filter -->
+
+    <div class="col-md-3">
+
+        <select
+            name="status"
+            class="form-select"
+        >
+
+            <option value="" data-i18n="All Status">
+                All Status
+            </option>
+
+            <option
+                value="Pending"
+                data-i18n="Pending"
+                {% if request.args.get('status') == 'Pending' %}
+                selected
+                {% endif %}
             >
-         </div>
+                Pending
+            </option>
 
-         <!-- status filter -->
-           <div class="col-md-3">
-                <select
-                    name="status"
-                    class="form-select"
-                >
+            <option
+                value="In Progress"
+                data-i18n="In Progress"
+                {% if request.args.get('status') == 'In Progress' %}
+                selected
+                {% endif %}
+            >
+                In Progress
+            </option>
 
-                    <option value="">
-                        All Status
-                    </option>
+            <option
+                value="Completed"
+                data-i18n="Completed"
+                {% if request.args.get('status') == 'Completed' %}
+                selected
+                {% endif %}
+            >
+                Completed
+            </option>
 
-                    <option value="Pending"
-                        {% if request.args.get('status') == 'Pending' %}
-                        selected
-                        {% endif %}
-                    >
-                        Pending
-                    </option>
+        </select>
 
-                    <option value="In Progress"
-                        {% if request.args.get('status') == 'In Progress' %}
-                        selected
-                        {% endif %}
-                    >
-                        In Progress
-                    </option>
+    </div>
 
-                    <option value="Completed"
-                        {% if request.args.get('status') == 'Completed' %}
-                        selected
-                        {% endif %}
-                    >
-                        Completed
-                    </option>
-                </select>
-           </div>
+    <!-- submit -->
 
-           <!-- Submit -->
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100">
-                     Apply
-                </button>
-            </div>
-            <div class="col-md-2">
-                <a href="/tasks" class="btn btn-outline-secondary w-100">Reset</a>
-            </div>
-    </form>
+    <div class="col-md-2">
 
-    <div class="table-responsive tasks-table shadow-sm bg-white border">
-    <table class="table table-hover align-middle">
+        <button class="btn btn-primary w-100" data-i18n="Apply">
+            Apply
+        </button>
 
-        <thead>
-        <tr>
-            <th class="col-sm-hide">ID</th>
-            <th>Title</th>
-            <th>Status</th>
-            <th class="col-xs-hide">Priority</th>
-            <th class="col-sm-hide">Progress</th>
-            <th class="col-sm-hide">Assigned To</th>
-            <th class="col-xs-hide">Deadline</th>
-            <th>Actions</th>
-            
-        </tr>
-        </thead>
-        <tbody id="live-task-rows">
+    </div>
 
-        {% for task in tasks %}
+    <div class="col-md-2">
 
-        <tr
+        <a
+            href="/tasks"
+            class="btn btn-outline-secondary w-100"
+            data-i18n="Reset"
+        >
+            Reset
+        </a>
+
+    </div>
+
+</form>
+
+<div class="table-responsive tasks-table shadow-sm bg-white border">
+
+<table class="table table-hover align-middle">
+
+    <thead>
+
+    <tr>
+
+        <th class="col-sm-hide">ID</th>
+
+        <th data-i18n="Title">
+            Title
+        </th>
+
+        <th data-i18n="Status">
+            Status
+        </th>
+
+        <th class="col-xs-hide" data-i18n="Priority">
+            Priority
+        </th>
+
+        <th class="col-sm-hide" data-i18n="Progress">
+            Progress
+        </th>
+
+        <th class="col-sm-hide" data-i18n="Assigned To">
+            Assigned To
+        </th>
+
+        <th class="col-xs-hide" data-i18n="Deadline">
+            Deadline
+        </th>
+
+        <th data-i18n="Actions">
+            Actions
+        </th>
+
+    </tr>
+
+    </thead>
+
+    <tbody id="live-task-rows">
+
+    <!-- ========================= -->
+    <!-- MAIN TASKS -->
+    <!-- ========================= -->
+
+    {% for task in tasks %}
+
+    <tr
         {% if is_overdue_task(task, today) %}
             class="table-danger"
         {% endif %}
-        >
+    >
 
+        <td class="col-sm-hide" data-label="ID">
+            {{ task.id }}
+        </td>
 
-            <td class="col-sm-hide">{{ task.id }}</td>
+        <td data-label="Title">
+            {{ task.title }}
+        </td>
 
-            <td>{{ task.title }}</td>
+        <td data-label="Status">
 
-            <td>
-                {% if task.status == "Completed" %}
-                    <span class="badge text-bg-success tasks-pill">Completed</span>
-                {% elif task.status == "In Progress" %}
-                    <span class="badge text-bg-primary tasks-pill">In Progress</span>
-                {% else %}
-                    <span class="badge text-bg-secondary tasks-pill">Pending</span>
-                {% endif %}
-            </td>
+            {% if task.status == "Completed" %}
 
-            <td class="col-xs-hide">
-                {% if task.priority == "High" %}
+            <span
+                class="badge text-bg-success tasks-pill"
+                data-i18n="Completed"
+            >
+                Completed
+            </span>
 
-                <span class="badge text-bg-danger tasks-pill">
-                    High
-                </span>
+            {% elif task.status == "In Progress" %}
 
-                {% elif task.priority == "Medium" %}
+            <span
+                class="badge text-bg-primary tasks-pill"
+                data-i18n="In Progress"
+            >
+                In Progress
+            </span>
 
-                <span class="badge text-bg-warning tasks-pill">
-                    Medium
-                </span>
+            {% else %}
 
-                {% else %}
+            <span
+                class="badge text-bg-secondary tasks-pill"
+                data-i18n="Pending"
+            >
+                Pending
+            </span>
 
-                <span class="badge text-bg-info tasks-pill">
-                    Low
-                </span>
+            {% endif %}
 
-                {% endif %}
-            </td>
+        </td>
 
-            <td class="col-sm-hide">{{ task.progress }}%</td>
+        <td class="col-xs-hide" data-label="Priority">
 
-            <td class="col-sm-hide">
-                {% for user in task.assigned_users %}
-                    <span class="badge text-bg-light border">
-                        {{ user.username }}
-                    </span>
-                {% endfor %}
-            </td>
+            {% if task.priority == "High" %}
 
-            <td class="col-xs-hide">{{ task.deadline }}</td>
+            <span
+                class="badge text-bg-danger tasks-pill"
+                data-i18n="High"
+            >
+                High
+            </span>
 
-            <td class="tasks-actions">
-                <a href="/update-task/{{ task.id }}" class="btn btn-outline-primary btn-sm">Update</a>
+            {% elif task.priority == "Medium" %}
 
-                <form method="POST" action="/delete-task/{{ task.id }}" class="d-inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button
-                        type="button"
-                        class="btn btn-outline-danger btn-sm"
-                        data-confirm="Delete this task?"
-                        data-confirm-ok="Delete"
-                        data-confirm-submit="1"
-                    >
-                        Delete
-                    </button>
-                </form>
-                <a href="/task/{{ task.id }}" class="btn btn-primary btn-sm">View</a>
-            </td>
-        </tr>
+            <span
+                class="badge text-bg-warning tasks-pill"
+                data-i18n="Medium"
+            >
+                Medium
+            </span>
+
+            {% else %}
+
+            <span
+                class="badge text-bg-info tasks-pill"
+                data-i18n="Low"
+            >
+                Low
+            </span>
+
+            {% endif %}
+
+        </td>
+
+        <td class="col-sm-hide" data-label="Progress">
+            {{ task.progress }}%
+        </td>
+
+        <td class="col-sm-hide" data-label="Assigned To">
+
+            {% for user in task.assigned_users %}
+
+            <span class="badge text-bg-light border">
+                {{ user.full_name or user.username }}
+            </span>
+
+            {% endfor %}
+
+        </td>
+
+        <td class="col-xs-hide" data-label="Deadline">
+            {{ task.deadline }}
+        </td>
+
+        <td class="tasks-actions" data-label="Actions">
+
+            <form
+                method="POST"
+                action="/delete-task/{{ task.id }}"
+                class="d-inline"
+            >
+
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
+                <button
+                    type="button"
+                    class="btn btn-outline-danger btn-sm"
+                    data-confirm="{{ _('Delete this task?') }}"
+                    data-confirm-ok="{{ _('Delete') }}"
+                    data-confirm-submit="1"
+                    data-i18n="Delete"
+                >
+                    Delete
+                </button>
+
+            </form>
+
+            <a
+                href="/task/{{ task.id }}"
+                class="btn btn-primary btn-sm"
+                data-i18n="View"
+            >
+                View
+            </a>
+
+        </td>
+
+    </tr>
+
+    {% endfor %}
+
+    <!-- ========================= -->
+    <!-- SUBTASKS -->
+    <!-- ========================= -->
+
+    {% for subtask in subtasks %}
+
+    <tr class="table-info">
+
+        <td class="col-sm-hide">
+            S-{{ subtask.id }}
+        </td>
+
+        <td>
+
+            {{ subtask.title }}
+
+            <span class="badge bg-info ms-2">
+                Subtask
+            </span>
+
+        </td>
+
+        <td>
+
+            <span class="badge text-bg-primary">
+                {{ subtask.status }}
+            </span>
+
+        </td>
+
+        <td class="col-xs-hide">
+            -
+        </td>
+
+        <td class="col-sm-hide">
+            {{ subtask.progress }}%
+        </td>
+
+        <td class="col-sm-hide">
+
+            {% if subtask.assigned_user %}
+
+            <span class="badge text-bg-light border">
+
+                {{ subtask.assigned_user.full_name or subtask.assigned_user.username }}
+
+            </span>
+
+            {% endif %}
+
+        </td>
+
+        <td class="col-xs-hide">
+            -
+        </td>
+
+        <td class="tasks-actions">
+
+            <a
+                href="/subtask/{{ subtask.id }}"
+                class="btn btn-primary btn-sm"
+                data-i18n="View"
+            >
+                View
+            </a>
+
+            <a
+                href="/update-subtask/{{ subtask.id }}"
+                class="btn btn-warning btn-sm"
+                data-i18n="Update"
+            >
+                Update
+            </a>
+
+        </td>
+
+    </tr>
+
+    {% endfor %}
+
+    </tbody>
+
+</table>
+
+</div>
+
+{% if pagination.pages > 1 %}
+
+<nav class="mt-3">
+
+    <ul class="pagination">
+
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+
+            <a
+                class="page-link"
+                href="/tasks?page={{ pagination.prev_num }}&search={{ request.args.get('search', '') }}&status={{ request.args.get('status', '') }}"
+                data-i18n="Previous"
+            >
+                Previous
+            </a>
+
+        </li>
+
+        {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=1, right_edge=1) %}
+
+            {% if page_num %}
+
+            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+
+                <a
+                    class="page-link"
+                    href="/tasks?page={{ page_num }}&search={{ request.args.get('search', '') }}&status={{ request.args.get('status', '') }}"
+                >
+                    {{ page_num }}
+                </a>
+
+            </li>
+
+            {% endif %}
 
         {% endfor %}
 
-        </tbody>
-    </table>
-    </div>
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
 
-    {% if pagination.pages > 1 %}
-    <nav class="mt-3">
-        <ul class="pagination">
-            <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-                <a class="page-link" href="/tasks?page={{ pagination.prev_num }}&search={{ request.args.get('search', '') }}&status={{ request.args.get('status', '') }}">Previous</a>
-            </li>
-            {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=1, right_edge=1) %}
-                {% if page_num %}
-                    <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                        <a class="page-link" href="/tasks?page={{ page_num }}&search={{ request.args.get('search', '') }}&status={{ request.args.get('status', '') }}">{{ page_num }}</a>
-                    </li>
-                {% endif %}
-            {% endfor %}
-            <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-                <a class="page-link" href="/tasks?page={{ pagination.next_num }}&search={{ request.args.get('search', '') }}&status={{ request.args.get('status', '') }}">Next</a>
-            </li>
-        </ul>
-    </nav>
-    {% endif %}
+            <a
+                class="page-link"
+                href="/tasks?page={{ pagination.next_num }}&search={{ request.args.get('search', '') }}&status={{ request.args.get('status', '') }}"
+                data-i18n="Next"
+            >
+                Next
+            </a>
+
+        </li>
+
+    </ul>
+
+</nav>
+
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}

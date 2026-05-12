@@ -1,31 +1,123 @@
 {% extends "base.html" %}
 
-{% block title %}Create Subtask{% endblock %}
+{% block title %}{{ _('Create Subtask') }}{% endblock %}
 
 {% block content %}
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-    <h1 class="mb-4">Create Subtask</h1>
+
+    <h1 class="mb-4" data-i18n="Create Subtask">
+        Create Subtask
+    </h1>
+
     <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
 
         <div class="mb-3">
 
-            <label>Subtask Title</label>
+            <label data-i18n="Subtask Title">
+                Subtask Title
+            </label>
 
             <input
                 type="text"
                 name="title"
                 class="form-control"
-            required>
+                required
+            >
 
         </div>
 
-        <button class="btn btn-primary">
+        <!-- ========================= -->
+        <!-- ASSIGN EMPLOYEE -->
+        <!-- ========================= -->
+
+        <div class="mb-3 assign-picker" data-assign-picker>
+
+            <label
+                class="form-label"
+                data-i18n="Assign Employees"
+            >
+                Assign Employees
+            </label>
+
+            <div class="dropdown">
+
+                <button
+                    class="btn btn-outline-secondary assign-picker-toggle w-100 d-flex justify-content-between align-items-center"
+                    type="button"
+                    data-bs-toggle="dropdown"
+                    data-bs-auto-close="outside"
+                >
+
+                    <span data-assign-summary>
+                        Select employees
+                    </span>
+
+                    <i class="bi bi-chevron-down"></i>
+
+                </button>
+
+                <div class="dropdown-menu assign-picker-menu p-2 w-100">
+
+                    <input
+                        type="search"
+                        class="form-control form-control-sm mb-2"
+                        placeholder="Search user by name..."
+                        data-assign-search
+                    >
+
+                    <div class="assign-picker-options">
+
+                        {% for user in users %}
+
+                        <label
+                            class="dropdown-item d-flex align-items-center gap-2 rounded"
+                            data-assign-option
+                            data-user-name="{{ (user.full_name or user.username) | lower }}"
+                        >
+
+                            <input
+                                class="form-check-input m-0"
+                                type="radio"
+                                name="assigned_to"
+                                value="{{ user.id }}"
+                            >
+
+                            <span>
+                                {{ user.full_name or user.username }}
+                            </span>
+
+                            <small class="text-muted ms-auto">
+                                {{ user.role }} · {{ user.username }}
+                            </small>
+
+                        </label>
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <button
+            class="btn btn-primary"
+            data-i18n="Create Subtask"
+        >
             Create Subtask
         </button>
 
     </form>
+
     </div>
 </div>
 {% endblock %}

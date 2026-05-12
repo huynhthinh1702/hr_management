@@ -21,13 +21,96 @@
   font-weight: 700;
 }
 
+.tasks-actions {
+  min-width: 220px;
+}
+
+.tasks-actions form {
+  vertical-align: top;
+}
+
+.tasks-actions .form-control {
+  max-width: 180px;
+  display: inline-block;
+}
+
 /* Hide less important columns on small screens */
 @media (max-width: 575.98px) {
   .col-xs-hide {
     display: none !important;
   }
+
+  .tasks-table {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible;
+  }
+
+  .tasks-table table,
+  .tasks-table tbody,
+  .tasks-table tr,
+  .tasks-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .tasks-table thead {
+    display: none;
+  }
+
+  .tasks-table tr {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .tasks-table td {
+    border: 0;
+    padding: 10px 14px;
+  }
+
+  .tasks-table td::before {
+    content: attr(data-label);
+    display: block;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .tasks-actions {
+    min-width: 0;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .tasks-actions > a,
+  .tasks-actions > form,
+  .tasks-actions form .btn {
+    width: 100%;
+  }
+
+  .tasks-actions form {
+    grid-column: 1 / -1;
+    display: grid !important;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .tasks-actions .form-control {
+    max-width: none;
+    margin-bottom: 0 !important;
+  }
+
   .tasks-actions .btn {
-    padding: 6px 8px;
+    padding: 7px 10px;
   }
 }
 

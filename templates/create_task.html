@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Create Task{% endblock %}
+{% block title %}{{ _('Create Task') }}{% endblock %}
 
 {% block content %}
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-    <h1 class="mb-4">Create Task</h1>
+    <h1 class="mb-4" data-i18n="Create Task">Create Task</h1>
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="mb-3">
 
-            <label>Title</label>
+            <label data-i18n="Title">Title</label>
 
             <input
                 type="text"
@@ -23,7 +23,7 @@
 
         <div class="mb-3">
 
-            <label>Description</label>
+            <label data-i18n="Description">Description</label>
 
             <textarea
                 name="description"
@@ -32,33 +32,32 @@
 
         </div>
 
-        <div class="mb-3">
+        <div class="mb-3 assign-picker" data-assign-picker>
 
-            <label>Assign Employees</label>
-
-            <select
-                name="assigned_to"
-                class="form-select"
-                multiple
-            >
-
-                {% for user in users %}
-
-                    {% if user.role == "employee" %}
-
-                    <option value="{{ user.id }}">
-                        {{ user.username }}
-                    </option>
-
-                    {% endif %}
-                
-                {% endfor %}
-            </select>
+            <label class="form-label" data-i18n="Assign Employees">Assign Employees</label>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary assign-picker-toggle w-100 d-flex justify-content-between align-items-center" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <span data-assign-summary>Select employees</span>
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+                <div class="dropdown-menu assign-picker-menu p-2 w-100">
+                    <input type="search" class="form-control form-control-sm mb-2" placeholder="Search user by name..." data-assign-search>
+                    <div class="assign-picker-options">
+                        {% for user in users %}
+                            <label class="dropdown-item d-flex align-items-center gap-2 rounded" data-assign-option data-user-name="{{ (user.full_name or user.username) | lower }}">
+                                <input class="form-check-input m-0" type="checkbox" name="assigned_to" value="{{ user.id }}" data-user-label="{{ user.full_name or user.username }}">
+                                <span>{{ user.full_name or user.username }}</span>
+                                <small class="text-muted ms-auto">{{ user.role }} · {{ user.username }}</small>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="mb-3">
 
-            <label>Deadline</label>
+            <label data-i18n="Deadline">Deadline</label>
 
             <input
                 type="date"
@@ -69,22 +68,22 @@
 
         <div class="mb-3">
 
-            <label>Priority</label>
+            <label data-i18n="Priority">Priority</label>
 
             <select
                 name="priority"
                 class="form-control"
             >
 
-                <option value="Low">
+                <option value="Low" data-i18n="Low">
                     Low
                 </option>
 
-                <option value="Medium">
+                <option value="Medium" data-i18n="Medium">
                     Medium
                 </option>
 
-                <option value="High">
+                <option value="High" data-i18n="High">
                     High
                 </option>
 
@@ -92,7 +91,7 @@
 
         </div>
 
-        <button class="btn btn-primary">
+        <button class="btn btn-primary" data-i18n="Create Task">
             Create Task
         </button>
 

@@ -1,32 +1,35 @@
 {% extends "base.html" %}
 
-{% block title %}Update Subtask{% endblock %}
+{% block title %}{{ _('Update Subtask') }}{% endblock %}
 
 {% block content %}
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-    <h1 class="mb-4">Update Subtask</h1>
+    <h1 class="mb-4" data-i18n="Update Subtask">Update Subtask</h1>
+    <div class="mb-3">
+        <a href="/subtask/{{ subtask.id }}" class="btn btn-outline-secondary btn-sm" data-i18n="Back">Back</a>
+    </div>
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="mb-3">
 
-            <label>Status</label>
+            <label data-i18n="Status">Status</label>
 
             <select
                 name="status"
                 class="form-control"
             >
 
-                <option value="Pending" {% if subtask.status == "Pending" %}selected{% endif %}>
+                <option value="Pending" {% if subtask.status == "Pending" %}selected{% endif %} data-i18n="Pending">
                     Pending
                 </option>
 
-                <option value="In Progress" {% if subtask.status == "In Progress" %}selected{% endif %}>
+                <option value="In Progress" {% if subtask.status == "In Progress" %}selected{% endif %} data-i18n="In Progress">
                     In Progress
                 </option>
 
-                <option value="Completed" {% if subtask.status == "Completed" %}selected{% endif %}>
+                <option value="Completed" {% if subtask.status == "Completed" %}selected{% endif %} data-i18n="Completed">
                     Completed
                 </option>
 
@@ -36,7 +39,7 @@
 
         <div class="mb-3">
 
-            <label>Progress</label>
+            <label data-i18n="Progress">Progress</label>
 
             <input
                 type="number"
@@ -47,7 +50,7 @@
 
         </div>
 
-        <button class="btn btn-success">
+        <button class="btn btn-success" data-i18n="Update">
             Update
         </button>
 

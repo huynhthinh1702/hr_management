@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,6 +31,46 @@
 
         <div class="ms-auto d-flex align-items-center gap-2 gap-sm-3">
             {% if current_user %}
+                <div class="dropdown">
+                    <button
+                        class="btn btn-outline-secondary btn-sm position-relative"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                        id="notificationDropdown"
+                    >
+                        <i class="bi bi-bell"></i>
+                        {% if notification_summary.unread_count %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notificationBadge">
+                                {{ notification_summary.unread_count }}
+                            </span>
+                        {% endif %}
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end notification-menu shadow border-0" id="notificationMenu">
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                            <div class="fw-semibold" data-i18n="Notifications">{{ _("Notifications") }}</div>
+                            {% if notification_summary.unread_count %}
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-notifications-read data-i18n="Mark read">{{ _("Mark read") }}</button>
+                            {% endif %}
+                        </div>
+                        {% if notification_summary["items"] %}
+                            <div class="notification-list" id="notificationList">
+                                {% for item in notification_summary["items"] %}
+                                    <a href="{{ item.url or '#' }}" class="dropdown-item notification-item {% if not item.is_read %}is-unread{% endif %}">
+                                        <div class="d-flex justify-content-between gap-2">
+                                            <div class="fw-semibold text-wrap">{{ item.title }}</div>
+                                            <small class="text-muted text-nowrap">{{ item.created_at | vn_time }}</small>
+                                        </div>
+                                        <div class="small text-muted text-wrap">{{ item.message }}</div>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="px-3 py-4 text-center text-muted small" id="notificationEmpty" data-i18n="No notifications.">{{ _("No notifications.") }}</div>
+                        {% endif %}
+                    </div>
+                </div>
                 <button
                     class="btn btn-outline-secondary btn-sm d-none d-lg-inline-flex align-items-center gap-2"
                     type="button"
@@ -38,8 +78,15 @@
                     aria-label="Toggle sidebar"
                 >
                     <i class="bi bi-layout-sidebar-inset"></i>
-                    <span class="d-none d-xl-inline">Sidebar</span>
+                    <span class="d-none d-xl-inline" data-i18n="Sidebar">{{ _("Sidebar") }}</span>
                 </button>
+                <form method="POST" action="/language/{{ 'vi' if current_lang == 'en' else 'en' }}" class="d-inline-flex" data-language-form>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-secondary btn-sm language-toggle" type="submit" aria-label="Change language">
+                        <i class="bi bi-translate"></i>
+                        <span>{{ 'VI' if current_lang == 'en' else 'EN' }}</span>
+                    </button>
+                </form>
 
                 <a href="/profile" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
                     {% if current_user.avatar_path %}
@@ -49,12 +96,19 @@
                             {{ current_user.username[:1] | upper }}
                         </div>
                     {% endif %}
-                    <span class="small fw-semibold d-none d-sm-inline">{{ current_user.username }}</span>
+                    <span class="small fw-semibold d-none d-sm-inline">{{ current_user.full_name or current_user.username }}</span>
                 </a>
-                <a href="/logout" class="btn btn-outline-dark btn-sm">Logout</a>
+                <a href="/logout" class="btn btn-outline-dark btn-sm" data-i18n="Logout">{{ _("Logout") }}</a>
             {% else %}
-                <a href="/login" class="btn btn-outline-dark btn-sm">Login</a>
-                <a href="/register" class="btn btn-primary btn-sm">Register</a>
+                <form method="POST" action="/language/{{ 'vi' if current_lang == 'en' else 'en' }}" class="d-inline-flex" data-language-form>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-secondary btn-sm language-toggle" type="submit" aria-label="Change language">
+                        <i class="bi bi-translate"></i>
+                        <span>{{ 'VI' if current_lang == 'en' else 'EN' }}</span>
+                    </button>
+                </form>
+                <a href="/login" class="btn btn-outline-dark btn-sm" data-i18n="Login">{{ _("Login") }}</a>
+                <a href="/register" class="btn btn-primary btn-sm" data-i18n="Register">{{ _("Register") }}</a>
             {% endif %}
         </div>
     </div>
@@ -63,21 +117,30 @@
 {% macro sidebar_links() %}
     {% if current_user %}
         <div class="app-sidebar-section">
-            <div class="app-sidebar-title">Navigation</div>
-            <a class="app-nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a>
-            <a class="app-nav-link" href="/tasks"><i class="bi bi-list-check"></i><span>Tasks</span></a>
-            {% if session.get("role") == "manager" %}
-                <a class="app-nav-link" href="/create-task"><i class="bi bi-plus-circle"></i><span>Create Task</span></a>
+            <div class="app-sidebar-title" data-i18n="Navigation">{{ _("Navigation") }}</div>
+            <a class="app-nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span data-i18n="Dashboard">{{ _("Dashboard") }}</span></a>
+            <a class="app-nav-link" href="/tasks"><i class="bi bi-list-check"></i><span data-i18n="Tasks">{{ _("Tasks") }}</span></a>
+            {% if session.get("role") in ["manager", "director", "team_lead", "qa"] %}
+                <a class="app-nav-link" href="/create-task"><i class="bi bi-plus-circle"></i><span data-i18n="Create Task">{{ _("Create Task") }}</span></a>
             {% endif %}
-            <a class="app-nav-link" href="/kanban"><i class="bi bi-columns-gap"></i><span>Kanban Board</span></a>
-            <a class="app-nav-link" href="/profile"><i class="bi bi-person-circle"></i><span>Profile</span></a>
+            {% if session.get("role") in ["manager", "admin", "director", "team_lead", "qa"] %}
+                <a class="app-nav-link" href="/archived-tasks"><i class="bi bi-archive"></i><span data-i18n="Archived Tasks">{{ _("Archived Tasks") }}</span></a>
+            {% endif %}
+            <a class="app-nav-link" href="/kanban"><i class="bi bi-columns-gap"></i><span data-i18n="Kanban Board">{{ _("Kanban Board") }}</span></a>
+            {% if session.get("role") == "admin" %}
+                <a class="app-nav-link" href="/admin/users"><i class="bi bi-people"></i><span data-i18n="Admin Users">{{ _("Admin Users") }}</span></a>
+            {% endif %}
+            <a class="app-nav-link" href="/profile"><i class="bi bi-person-circle"></i><span data-i18n="Profile">{{ _("Profile") }}</span></a>
+            <button class="app-nav-link app-nav-button" type="button" data-bs-toggle="modal" data-bs-target="#userGuideModal">
+                <i class="bi bi-question-circle"></i><span data-i18n="User Guide">{{ _("User Guide") }}</span>
+            </button>
         </div>
     {% else %}
         <div class="app-sidebar-section">
-            <div class="app-sidebar-title">Welcome</div>
-            <a class="app-nav-link" href="/"><i class="bi bi-house"></i><span>Home</span></a>
-            <a class="app-nav-link" href="/login"><i class="bi bi-box-arrow-in-right"></i><span>Login</span></a>
-            <a class="app-nav-link" href="/register"><i class="bi bi-person-plus"></i><span>Register</span></a>
+            <div class="app-sidebar-title" data-i18n="Welcome">{{ _("Welcome") }}</div>
+            <a class="app-nav-link" href="/"><i class="bi bi-house"></i><span data-i18n="Home">Home</span></a>
+            <a class="app-nav-link" href="/login"><i class="bi bi-box-arrow-in-right"></i><span data-i18n="Login">{{ _("Login") }}</span></a>
+            <a class="app-nav-link" href="/register"><i class="bi bi-person-plus"></i><span data-i18n="Register">{{ _("Register") }}</span></a>
         </div>
     {% endif %}
 {% endmacro %}
@@ -96,6 +159,16 @@
     </main>
 </div>
 
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 1090;">
+            {% for message in messages %}
+                <div class="alert alert-info shadow-sm mb-2">{{ _(message) }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
+
 <!-- Mobile sidebar -->
 <div class="offcanvas offcanvas-start app-offcanvas" tabindex="-1" id="appSidebarOffcanvas" aria-labelledby="appSidebarOffcanvasLabel">
     <div class="offcanvas-header">
@@ -111,6 +184,41 @@
     </div>
 </div>
 
+{% if current_user %}
+<div class="modal fade" id="userGuideModal" tabindex="-1" aria-hidden="true" data-auto-show-guide="{{ '1' if show_user_guide else '0' }}">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _("User Guide") }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 user-guide-grid">
+                    {% if current_lang == 'vi' %}
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-speedometer2"></i><div><strong>Bảng điều khiển</strong><p>Theo dõi khối lượng công việc, hoàn thành, quá hạn và hoạt động vấn đề gần đây.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-list-check"></i><div><strong>Quản lý công việc</strong><p>Tạo, xem, cập nhật, lưu trữ và theo dõi tiến độ theo người phụ trách và hạn chót.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-columns-gap"></i><div><strong>Kanban</strong><p>Di chuyển công việc giữa Đang chờ, Đang xử lý và Hoàn thành với cập nhật trực tiếp.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-chat-dots"></i><div><strong>Bình luận / Sự cố</strong><p>Thảo luận chi tiết, tải tệp và báo cáo sự cố kèm mức độ nghiêm trọng khi cần.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-bell"></i><div><strong>Thông báo</strong><p>Sự kiện quan trọng hiển thị trên thanh tiêu đề: giao việc, quá hạn, sự cố nghiêm trọng, hoàn thành và yêu cầu cập nhật từ quản lý.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-shield-lock"></i><div><strong>Hồ sơ &amp; bảo mật</strong><p>Cập nhật hồ sơ, ảnh đại diện và mật khẩu tại trang Hồ sơ.</p></div></div></div>
+                    {% else %}
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-speedometer2"></i><div><strong>Dashboard</strong><p>Track workload, completion, overdue tasks, and recent issue activity.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-list-check"></i><div><strong>Task management</strong><p>Create, view, update, archive, and follow task progress by owner and deadline.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-columns-gap"></i><div><strong>Kanban</strong><p>Move work between Pending, In Progress, and Completed with live updates.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-chat-dots"></i><div><strong>Comment/Issue system</strong><p>Discuss task details, upload files, and report issues with severity when needed.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-bell"></i><div><strong>Notification</strong><p>Important events appear in the header, including assignments, overdue work, serious issues, completed tasks, and manager update requests.</p></div></div></div>
+                    <div class="col-md-6"><div class="guide-block"><i class="bi bi-shield-lock"></i><div><strong>Profile &amp; security</strong><p>Update your profile, avatar, and password from the Profile page.</p></div></div></div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal" data-i18n="Got it">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Toast container -->
 <div class="toast-container position-fixed top-0 end-0 p-3" id="hrToastContainer" style="z-index: 1080;"></div>
 <!-- Confirm Modal (Bootstrap) -->
@@ -125,8 +233,8 @@
                 <p class="mb-0 text-muted" data-hr-confirm-message>Are you sure?</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" data-hr-confirm-ok>Continue</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-i18n="Cancel">Cancel</button>
+                <button type="button" class="btn btn-danger" data-hr-confirm-ok data-i18n="Continue">Continue</button>
             </div>
         </div>
     </div>

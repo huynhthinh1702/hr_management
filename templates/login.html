@@ -1,27 +1,59 @@
 {% extends "base.html" %}
 
-{% block title %}Login{% endblock %}
+{% block title %}{{ _("Login") }}{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
         <div class="card shadow-sm border-0">
             <div class="card-body p-4">
-                <h1 class="h3 mb-4">Login</h1>
+                <h1 class="h3 mb-4" data-i18n="Login">{{ _("Login") }}</h1>
                 <form method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
-                        <label class="form-label">Email</label>
+                        <label class="form-label" data-i18n="Email">Email</label>
                         <input type="email" name="email" class="form-control" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Password</label>
+                        <label class="form-label" data-i18n="Password">Password</label>
                         <input type="password" name="password" class="form-control" required>
                     </div>
-                    <button class="btn btn-success w-100">Login</button>
+                    <button class="btn btn-primary w-100" data-i18n="Login">{{ _("Login") }}</button>
                 </form>
+                <div class="text-center mt-3">
+                    <a href="/forgot-password" class="text-decoration-none" data-i18n="Forgot password?">Forgot password?</a>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+{% if login_error %}
+<div class="modal fade" id="loginErrorModal" tabindex="-1" aria-hidden="true" data-auto-show-login-error="1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    {% if login_error == "locked" %}
+                        {{ _("Account Locked") }}
+                    {% else %}
+                        {{ _("Invalid Login") }}
+                    {% endif %}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+            </div>
+            <div class="modal-body text-muted">
+                {% if login_error == "locked" %}
+                    {{ _("Your account is locked. Please contact an administrator.") }}
+                {% else %}
+                    {{ _("The email or password is incorrect. Please try again.") }}
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">{{ _("Close") }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

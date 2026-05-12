@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Subtask Detail{% endblock %}
+
+{% block content %}
+<div id="subtaskDetailPage" data-subtask-id="{{ subtask.id }}" data-task-id="{{ subtask.task_id }}">
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1" id="live-subtask-title">{{ subtask.title }}</h1>
+        <div class="small text-muted d-flex flex-wrap gap-2 align-items-center" id="live-subtask-meta">
+            <span class="badge rounded-pill bg-info">Subtask</span>
+            <span class="badge rounded-pill bg-secondary" id="live-subtask-status">{{ subtask.status }}</span>
+            <span class="text-muted" id="live-subtask-progress-label"><span class="pct">{{ subtask.progress }}</span>% <span data-i18n="complete">complete</span></span>
+            {% if parent_task %}
+                <span class="text-muted">Parent: <a href="/task/{{ parent_task.id }}">{{ parent_task.title }}</a></span>
+            {% endif %}
+            {% if subtask.assigned_user %}
+                <span class="text-muted" id="live-subtask-assigned">Assigned: {{ subtask.assigned_user.full_name or subtask.assigned_user.username }}</span>
+            {% else %}
+                <span class="text-muted" id="live-subtask-assigned"></span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/update-subtask/{{ subtask.id }}" class="btn btn-warning" data-i18n="Update">Update</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4 data-i18n="Update Subtask">Update Subtask</h4>
+                <form method="POST" action="/update-subtask/{{ subtask.id }}" class="d-flex flex-wrap align-items-center gap-2" data-subtask-status-form>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="progress" id="live-subtask-progress-input" value="{{ subtask.progress }}">
+                    <label for="subtask-status-select" class="small text-muted mb-0" data-i18n="Status">Status</label>
+                    <select class="form-select form-select-sm w-auto" id="subtask-status-select" name="status" data-subtask-status-select>
+                        <option value="Pending" {% if subtask.status == "Pending" %}selected{% endif %} data-i18n="Pending">Pending</option>
+                        <option value="In Progress" {% if subtask.status == "In Progress" %}selected{% endif %} data-i18n="In Progress">In Progress</option>
+                        <option value="Completed" {% if subtask.status == "Completed" %}selected{% endif %} data-i18n="Completed">Completed</option>
+                    </select>
+                    <label for="subtask-progress" class="small text-muted mb-0" data-i18n="Progress">Progress</label>
+                    <input id="subtask-progress" type="number" name="progress" class="form-control form-control-sm w-auto" value="{{ subtask.progress }}" min="0" max="100" oninput="document.getElementById('live-subtask-progress-input').value=this.value">
+                    <button class="btn btn-outline-primary btn-sm" type="submit" data-i18n="Update">Update</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4 data-i18n="Task Comments">Comments</h4>
+                <form method="POST" action="/subtask/{{ subtask.id }}/comment" class="mb-3" data-ajax-form data-success-message="{{ _('Comment added.') }}" data-success-sections="comments,activities">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <textarea name="content" class="form-control mb-2" rows="3" placeholder="Write your comment..." required></textarea>
+                    <button class="btn btn-success btn-sm" data-i18n="Post Comment">Post Comment</button>
+                </form>
+                <div id="live-subtask-comments">
+                    {% if comments %}
+                        {% for comment in comments %}
+                            <div class="border rounded p-3 mb-2 bg-light">
+                                <div class="d-flex justify-content-between">
+                                    <strong>{{ comment.author_name }}</strong>
+                                    <small class="text-muted">{{ comment.created_at | vn_time }}</small>
+                                </div>
+                                <div>{{ comment.content }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0" data-i18n="No comments yet.">No comments yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4 data-i18n="Bug / Issue Tracker">Bug / Issue Tracker</h4>
+                <form method="POST" action="/subtask/{{ subtask.id }}/issues" class="mb-3" data-ajax-form data-success-message="{{ _('Issue reported.') }}" data-success-sections="issues,activities">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="title" class="form-control mb-2" placeholder="Issue title" required>
+                    <select name="severity" class="form-select mb-2">
+                        <option value="Normal" data-i18n="Normal">Normal</option>
+                        <option value="High" data-i18n="High">High</option>
+                        <option value="Critical" data-i18n="Critical">Critical</option>
+                    </select>
+                    <textarea name="description" class="form-control mb-2" rows="3" placeholder="Describe this bug or problem"></textarea>
+                    <button class="btn btn-danger btn-sm" data-i18n="Report Issue">Report Issue</button>
+                </form>
+                <div id="live-subtask-issues">
+                    {% if issues %}
+                        {% for issue in issues %}
+                            <div class="border rounded p-3 mb-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-semibold">{{ issue.title }}</div>
+                                        <small class="text-muted"><span data-i18n="by">by</span> {{ issue.creator_name }} - {{ issue.created_at | vn_time }} - {{ issue.severity or "Normal" }}</small>
+                                    </div>
+                                    {% if issue.status == "Resolved" %}
+                                        <span class="badge bg-success" data-i18n="Resolved">Resolved</span>
+                                    {% else %}
+                                        <span class="badge bg-danger" data-i18n="Open">Open</span>
+                                    {% endif %}
+                                </div>
+                                {% if issue.description %}
+                                    <div class="mt-2">{{ issue.description }}</div>
+                                {% endif %}
+                                {% if issue.status != "Resolved" %}
+                                    <form method="POST" action="/issues/{{ issue.id }}/resolve" class="mt-2" data-ajax-form data-success-message="{{ _('Issue resolved.') }}" data-success-sections="issues,activities">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-outline-success btn-sm" data-i18n="Mark as Resolved">Mark as Resolved</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0" data-i18n="No issues reported.">No issues reported.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <h4 data-i18n="File Upload">File Upload</h4>
+                <form method="POST" action="/subtask/{{ subtask.id }}/upload" enctype="multipart/form-data" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="file" name="file" class="form-control mb-2" required>
+                    <button class="btn btn-primary btn-sm" data-i18n="Upload File">Upload File</button>
+                </form>
+                <div id="live-subtask-attachments-wrap">
+                <ul class="list-group list-group-flush" id="live-subtask-attachments">
+                    {% if attachments %}
+                        {% for item in attachments %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <div>
+                                    <div class="fw-semibold">{{ item.original_filename }}</div>
+                                    <small class="text-muted"><span data-i18n="by">by</span> {{ item.uploader_name }}</small>
+                                </div>
+                                <a href="/uploads/{{ item.file_path }}" class="btn btn-outline-secondary btn-sm" data-i18n="Download">Download</a>
+                            </li>
+                        {% endfor %}
+                    {% endif %}
+                </ul>
+                <p class="text-muted mb-0 {% if attachments %}d-none{% endif %}" id="live-subtask-attachments-empty" data-i18n="No files uploaded.">No files uploaded.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h4 data-i18n="Activity History">Activity History</h4>
+                <div id="live-subtask-activities-wrap" data-activity-page="{{ activity_pagination.page }}">
+                {% if activities %}
+                    <ul class="hr-timeline" id="live-subtask-activities">
+                        {% for activity in activities %}
+                            {% set act = (activity.action or '')|lower %}
+                            {% if 'comment' in act %}
+                                {% set dot = 'hr-dot-comment' %}
+                                {% set icon = 'bi-chat-dots' %}
+                            {% elif 'upload' in act %}
+                                {% set dot = 'hr-dot-upload' %}
+                                {% set icon = 'bi-paperclip' %}
+                            {% elif 'completed' in act %}
+                                {% set dot = 'hr-dot-complete' %}
+                                {% set icon = 'bi-check2-circle' %}
+                            {% elif 'issue' in act %}
+                                {% set dot = 'hr-dot-issue' %}
+                                {% set icon = 'bi-bug' %}
+                            {% elif 'moved' in act %}
+                                {% set dot = 'hr-dot-move' %}
+                                {% set icon = 'bi-arrow-left-right' %}
+                            {% else %}
+                                {% set dot = 'hr-dot-default' %}
+                                {% set icon = 'bi-clock-history' %}
+                            {% endif %}
+                            <li class="hr-timeline-item">
+                                <div class="hr-timeline-dot {{ dot }}"><i class="bi {{ icon }}"></i></div>
+                                <div class="hr-timeline-body">
+                                    <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <div class="fw-semibold">{{ activity.action }}</div>
+                                        <small class="text-muted text-nowrap">{{ activity.created_at | vn_time }}</small>
+                                    </div>
+                                    <div class="text-muted">{{ activity.details }}</div>
+                                    <div class="small text-muted mt-1"><span data-i18n="by">by</span> {{ activity.actor_name }}</div>
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    {% if activity_pagination.pages > 1 %}
+                        <nav class="mt-3" id="live-subtask-activity-pagination">
+                            <ul class="pagination pagination-sm">
+                                <li class="page-item {% if not activity_pagination.has_prev %}disabled{% endif %}">
+                                    <a class="page-link" href="/subtask/{{ subtask.id }}?activity_page={{ activity_pagination.prev_num }}" data-activity-page-link="{{ activity_pagination.prev_num }}" data-i18n="Prev">Prev</a>
+                                </li>
+                                {% for page_num in activity_pagination.iter_pages(left_edge=1, left_current=1, right_current=1, right_edge=1) %}
+                                    {% if page_num %}
+                                        <li class="page-item {% if page_num == activity_pagination.page %}active{% endif %}">
+                                            <a class="page-link" href="/subtask/{{ subtask.id }}?activity_page={{ page_num }}" data-activity-page-link="{{ page_num }}">{{ page_num }}</a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                <li class="page-item {% if not activity_pagination.has_next %}disabled{% endif %}">
+                                    <a class="page-link" href="/subtask/{{ subtask.id }}?activity_page={{ activity_pagination.next_num }}" data-activity-page-link="{{ activity_pagination.next_num }}" data-i18n="Next">Next</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted mb-0" data-i18n="No activity recorded.">No activity recorded.</p>
+                {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/pages/subtask_detail.js"></script>
+{% endblock %}
+
