@@ -361,6 +361,8 @@ def serialize_task_live(task_id, sections=None, activity_page=1):
                 "title": s.title,
                 "status": s.status,
                 "progress": s.progress,
+                "assigned_to": s.assigned_to,
+                "assigned_name": (s.assigned_user.full_name or s.assigned_user.username) if s.assigned_user else "Unassigned",
             }
             for s in subtasks
         ]
@@ -921,22 +923,50 @@ def api_subtask_live(subtask_id):
 def api_dashboard_summary():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
+    
+    current_user_id = session["user_id"]
+    
+    # TASKS
 
     tasks = scoped_task_query().all()
     total_tasks = len(tasks)
     completed_tasks = sum(1 for t in tasks if t.status == "Completed")
     pending_tasks = total_tasks - completed_tasks
 
+    # SUBTASKS (only active ones, parent task not deleted)
+
+    subtasks = SubTask.query.filter(
+        SubTask.assigned_to == current_user_id
+    ).all()
+    subtasks = [s for s in subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
+
+    subtask_total = len(subtasks)
+    subtask_completed = sum(1 for s in subtasks if s.status == "Completed")
+    subtask_pending = subtask_total - subtask_completed
+
+    # FINAL TASK COUNTS
+
+    total_tasks = total_tasks + subtask_total
+    completed_tasks = completed_tasks + subtask_completed
+    pending_tasks = pending_tasks + subtask_pending
+
+    # ISSUES (only from existing tasks/subtasks, exclude orphaned)
+
     task_ids = [t.id for t in tasks]
-    if task_ids:
-        total_issues = Issue.query.filter(Issue.task_id.in_(task_ids)).count()
-        resolved_issues = Issue.query.filter(
-            Issue.task_id.in_(task_ids),
+    subtask_ids = [s.id for s in subtasks]
+    if task_ids or subtask_ids:
+        issue_query = Issue.query.filter(
+            db.or_(
+                Issue.task_id.in_(task_ids) if task_ids else False,
+                Issue.subtask_id.in_(subtask_ids) if subtask_ids else False  
+            )
+        )
+        total_issues = issue_query.count()
+        resolved_issues = issue_query.filter(
             Issue.status == "Resolved"
         ).count()
         recent_issues = (
-            Issue.query.filter(Issue.task_id.in_(task_ids))
-            .order_by(Issue.created_at.desc())
+            issue_query.order_by(Issue.created_at.desc())
             .limit(6)
             .all()
         )
@@ -979,6 +1009,10 @@ def api_dashboard_analytics():
     overdue = sum(1 for t in tasks if is_overdue_task(t, today=today_date))
     overdue_rate = int((overdue / total) * 100) if total else 0
 
+    # Also fetch all subtasks to include subtask assignee productivity
+    all_subtasks = SubTask.query.all()
+    active_subtasks = [s for s in all_subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
+
     # Productivity by employee (assigned tasks completed)
     prod = {}
     for t in tasks:
@@ -988,6 +1022,16 @@ def api_dashboard_analytics():
             prod[label]["total"] += 1
             if t.status == "Completed":
                 prod[label]["completed"] += 1
+
+    # Also count subtask assignee productivity
+    for s in active_subtasks:
+        if s.assigned_user:
+            label = display_user_name(s.assigned_user)
+            prod.setdefault(label, {"username": label, "completed": 0, "total": 0})
+            prod[label]["total"] += 1
+            if s.status == "Completed":
+                prod[label]["completed"] += 1
+
     productivity = sorted(prod.values(), key=lambda x: (-x["completed"], -x["total"], x["username"]))[:12]
 
     # Task trend by day (based on ActivityLog)
@@ -1110,6 +1154,23 @@ def api_tasks_table():
     tasks = pagination.items
     today = datetime.now(VN_TZ).date()
 
+    current_user_role = session.get("role")
+    current_user_id = session.get("user_id")
+
+    def can_update_task(task_obj):
+        role = current_user_role
+        if role in ["admin", "manager", "director", "team_lead"]:
+            return True
+        if role == "qa":
+            return True
+        return False
+
+    def can_delete_task(task_obj):
+        role = current_user_role
+        if role in ["admin", "manager", "director", "team_lead"]:
+            return True
+        return False
+
     def serialize_row(t):
         d = parse_deadline(t.deadline)
         return {
@@ -1121,8 +1182,45 @@ def api_tasks_table():
             "deadline": d.strftime("%Y-%m-%d") if d else (t.deadline or ""),
             "is_overdue": is_overdue_task(t, today=today),
             "delete_request_status": t.delete_request_status,
+            "can_update": can_update_task(t),
+            "can_delete": can_delete_task(t),
             "assigned_users": [{"username": u.username, "full_name": display_user_name(u)} for u in (t.assigned_users or [])],
+            "is_subtask": False,
+            "subtask_id": None,
+            "subtask_assigned_name": None,
         }
+
+    # Also fetch subtasks assigned to current user (matching server-side /tasks behavior)
+    # IMPORTANT: exclude subtasks whose parent task is deleted (archived)
+    assigned_subtasks = SubTask.query.filter_by(
+        assigned_to=session.get("user_id")
+    ).options(selectinload(SubTask.assigned_user)).all()
+    active_subtask_ids = []
+    for s in assigned_subtasks:
+        pt = Task.query.get(s.task_id)
+        if pt and not pt.is_deleted:
+            active_subtask_ids.append(s.id)
+    assigned_subtasks = [s for s in assigned_subtasks if s.id in active_subtask_ids]
+
+    subtask_rows = []
+    for s in assigned_subtasks:
+        parent_task = Task.query.get(s.task_id)
+        subtask_rows.append({
+            "id": s.id,
+            "title": s.title,
+            "status": s.status,
+            "priority": "",
+            "progress": s.progress or 0,
+            "deadline": "",
+            "is_overdue": False,
+            "delete_request_status": None,
+            "can_update": True,
+            "can_delete": False,
+            "assigned_users": [{"username": s.assigned_user.username if s.assigned_user else "", "full_name": (s.assigned_user.full_name or s.assigned_user.username) if s.assigned_user else ""}],
+            "is_subtask": True,
+            "subtask_id": s.id,
+            "subtask_assigned_name": (s.assigned_user.full_name or s.assigned_user.username) if s.assigned_user else "Unassigned",
+        })
 
     return jsonify({
         "today": today.strftime("%Y-%m-%d"),
@@ -1131,6 +1229,7 @@ def api_tasks_table():
         "has_prev": pagination.has_prev,
         "has_next": pagination.has_next,
         "tasks": [serialize_row(t) for t in tasks],
+        "subtasks": subtask_rows,
     })
 
 
@@ -1254,35 +1353,86 @@ def logout():
 # Dashboard
 @app.route("/dashboard")
 def dashboard():
+
     if "user_id" not in session:
         return redirect("/login")
 
-    tasks = scoped_task_query().options(selectinload(Task.assigned_users)).all()
+    current_user_id = session["user_id"]
 
-    total_tasks = len(tasks)
-    completed_tasks = 0
-    pending_tasks = 0
+    # TASKS
 
-    for task in tasks:
-        if task.status == "Completed":
-            completed_tasks += 1
-        else:
-            pending_tasks += 1
+    tasks = scoped_task_query().options(
+        selectinload(Task.assigned_users)
+    ).all()
 
-    task_ids = [task.id for task in tasks]
-    if task_ids:
-        total_issues = Issue.query.filter(Issue.task_id.in_(task_ids)).count()
-        resolved_issues = Issue.query.filter(
-            Issue.task_id.in_(task_ids),
+    task_total = len(tasks)
+
+    task_completed = sum(
+        1 for t in tasks
+        if t.status == "Completed"
+    )
+
+    task_pending = task_total - task_completed
+
+    # SUBTASKS (only active ones, parent task not deleted)
+
+    subtasks = SubTask.query.filter(
+        SubTask.assigned_to == current_user_id
+    ).all()
+    subtasks = [s for s in subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
+
+    subtask_total = len(subtasks)
+
+    subtask_completed = sum(
+        1 for s in subtasks
+        if s.status == "Completed"
+    )
+
+    subtask_pending = subtask_total - subtask_completed
+
+    # FINAL COUNTS
+
+    total_tasks = task_total + subtask_total
+    completed_tasks = task_completed + subtask_completed
+    pending_tasks = task_pending + subtask_pending
+
+    # ISSUES (only from existing tasks/subtasks, exclude orphaned)
+
+    task_ids = [t.id for t in tasks]
+    subtask_ids = [s.id for s in subtasks]
+
+    if task_ids or subtask_ids:
+        issue_query = Issue.query.filter(
+            db.or_(
+                Issue.task_id.in_(task_ids) if task_ids else False,
+                Issue.subtask_id.in_(subtask_ids) if subtask_ids else False
+            )
+        )
+
+        total_issues = issue_query.count()
+
+        resolved_issues = issue_query.filter(
             Issue.status == "Resolved"
         ).count()
-        recent_issues = Issue.query.filter(Issue.task_id.in_(task_ids)).order_by(Issue.created_at.desc()).limit(6).all()
+
+        recent_issues = (
+            issue_query
+            .order_by(Issue.created_at.desc())
+            .limit(6)
+            .all()
+        )
+        # Also filter recent issues: exclude issues belonging to deleted subtasks
+        recent_issues = [i for i in recent_issues if not i.subtask_id or (SubTask.query.get(i.subtask_id) is not None and Task.query.get(i.task_id) and not Task.query.get(i.task_id).is_deleted)]
     else:
         total_issues = 0
         resolved_issues = 0
         recent_issues = []
+
     unresolved_issues = total_issues - resolved_issues
-    issue_resolution_rate = int((resolved_issues / total_issues) * 100) if total_issues else 0
+    issue_resolution_rate = (
+        int((resolved_issues / total_issues) * 100)
+        if total_issues else 0
+    )
 
     return render_template(
         "dashboard.html",
@@ -1608,6 +1758,7 @@ def resolve_issue(issue_id):
     issue.resolved_at = datetime.utcnow()
     log_activity(issue.task_id, "Resolved issue", issue.title)
     db.session.commit()
+    socketio.emit("global_changed", {"type": "issue_resolved"})
     sections = ["issues", "activities"]
     notify_task_live(issue.task_id, sections=sections)
     notify_global_change(kind="task_updated", task_id=issue.task_id)
@@ -1825,6 +1976,7 @@ def create_subtask(task_id):
         db.session.add(new_subtask)
         log_activity(task_id, "Created subtask", title)
         db.session.commit()
+        socketio.emit("global_changed", {"type":"subtask_created"})
         notify_task_live(task_id)
         notify_global_change(kind="task_updated", task_id=task_id)
 
@@ -1944,6 +2096,7 @@ def create_subtask_issue(subtask_id):
     db.session.add(issue)
     log_subtask_activity(subtask.task_id, subtask.id, "Created issue (subtask)", title)
     db.session.commit()
+    socketio.emit("global_changed",{"type":"issue_created"})
     notify_task_live(subtask.task_id)
     notify_global_change(kind="task_updated", task_id=subtask.task_id)
     if wants_json_response():
@@ -2027,18 +2180,20 @@ def update_subtask(id):
         subtask.status = request.form["status"]
         subtask.progress = int(request.form["progress"])
         db.session.commit()
+        socketio.emit("global_changed", {"type":"subtask_updated"})
 
         subtasks = SubTask.query.filter_by(task_id=subtask.task_id).all()
 
-        total_progress = 0
-        for item in subtasks:
-            total_progress += item.progress
+        total_progress = sum(s.progress or 0 for s in subtasks)
 
         average_progress = int(total_progress / len(subtasks)) if subtasks else 0
 
-        parent_task = scoped_task_query().filter(Task.id == subtask.task_id).first()
+        parent_task = Task.query.get(subtask.task_id)
         if not parent_task:
-            return redirect("/tasks")
+            return jsonify({
+                "success": False,
+                "error": "Parent task not found."
+            }), 404
 
         parent_task.progress = average_progress
 
@@ -2064,10 +2219,7 @@ def update_subtask(id):
                 "message": "Subtask updated successfully.",
             })
         
-        return jsonify({
-            "success": True,
-            "message": "Subtask updated successfully.",
-        })
+        return redirect(f"/subtask/{subtask.id}")
 
     return render_template("update_subtask.html", subtask=subtask)
 
@@ -2107,6 +2259,8 @@ def tasks():
     assigned_subtasks = SubTask.query.filter_by(
         assigned_to=session.get("user_id")
     ).all()
+    # Filter out subtasks whose parent task is deleted (archived)
+    assigned_subtasks = [s for s in assigned_subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
 
     if search:
         query = query.filter(Task.title.ilike(f"%{search}%"))

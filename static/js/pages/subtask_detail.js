@@ -1,22 +1,22 @@
 // Subtask detail: section-scoped AJAX + realtime refresh (via parent task live updates).
 (function () {
-  const root = document.getElementById("subtaskDetailPage");
+  var root = document.getElementById("subtaskDetailPage");
   if (!root) return;
 
-  const SUBTASK_ID = Number(root.dataset.subtaskId || 0);
-  const TASK_ID = Number(root.dataset.taskId || 0);
+  var SUBTASK_ID = Number(root.dataset.subtaskId || 0);
+  var TASK_ID = Number(root.dataset.taskId || 0);
   if (!SUBTASK_ID) return;
 
-  const VALID_SECTIONS = ["subtask", "comments", "attachments", "issues", "activities"];
-  const pendingSections = new Set();
-  let refreshTimer;
+  var VALID_SECTIONS = ["subtask", "comments", "attachments", "issues", "activities"];
+  var pendingSections = new Set();
+  var refreshTimer;
 
   function qs(sel, base) {
     return (base || document).querySelector(sel);
   }
 
   function escapeHtml(text) {
-    const div = document.createElement("div");
+    var div = document.createElement("div");
     div.textContent = text == null ? "" : String(text);
     return div.innerHTML;
   }
@@ -32,33 +32,33 @@
   }
 
   function badgeForStatus(status) {
-    const map = { Completed: "success", "In Progress": "primary", Pending: "secondary" };
-    const cls = map[status] || "secondary";
+    var map = { Completed: "success", "In Progress": "primary", Pending: "secondary" };
+    var cls = map[status] || "secondary";
     return "badge rounded-pill bg-" + cls;
   }
 
   function activityMeta(action) {
-    const a = (action || "").toLowerCase();
-    if (a.includes("comment")) return { dot: "hr-dot-comment", icon: "bi-chat-dots" };
-    if (a.includes("upload")) return { dot: "hr-dot-upload", icon: "bi-paperclip" };
-    if (a.includes("completed")) return { dot: "hr-dot-complete", icon: "bi-check2-circle" };
-    if (a.includes("issue")) return { dot: "hr-dot-issue", icon: "bi-bug" };
-    if (a.includes("moved")) return { dot: "hr-dot-move", icon: "bi-arrow-left-right" };
+    var a = (action || "").toLowerCase();
+    if (a.indexOf("comment") !== -1) return { dot: "hr-dot-comment", icon: "bi-chat-dots" };
+    if (a.indexOf("upload") !== -1) return { dot: "hr-dot-upload", icon: "bi-paperclip" };
+    if (a.indexOf("completed") !== -1) return { dot: "hr-dot-complete", icon: "bi-check2-circle" };
+    if (a.indexOf("issue") !== -1) return { dot: "hr-dot-issue", icon: "bi-bug" };
+    if (a.indexOf("moved") !== -1) return { dot: "hr-dot-move", icon: "bi-arrow-left-right" };
     return { dot: "hr-dot-default", icon: "bi-clock-history" };
   }
 
   function normalizeSections(sections) {
     if (!sections || !sections.length) return VALID_SECTIONS.slice();
-    return sections.filter((section) => VALID_SECTIONS.includes(section));
+    return sections.filter(function (section) { return VALID_SECTIONS.indexOf(section) !== -1; });
   }
 
   function currentActivityPage() {
-    const wrap = qs("#live-subtask-activities-wrap");
+    var wrap = qs("#live-subtask-activities-wrap");
     return Number((wrap && wrap.dataset.activityPage) || 1) || 1;
   }
 
   function setButtonLoading(form, isLoading) {
-    const btn = qs('button[type="submit"]', form) || qs("button", form);
+    var btn = qs('button[type="submit"]', form) || qs("button", form);
     if (!btn) return;
 
     if (isLoading) {
@@ -80,40 +80,40 @@
 
   function renderSubtask(s) {
     if (!s) return;
-    const titleEl = qs("#live-subtask-title");
+    var titleEl = qs("#live-subtask-title");
     if (titleEl) titleEl.textContent = s.title || "";
 
-    const st = qs("#live-subtask-status");
+    var st = qs("#live-subtask-status");
     if (st) {
       st.textContent = tr(s.status || "");
       st.className = badgeForStatus(s.status);
     }
 
-    const prog = qs("#live-subtask-progress-label");
+    var prog = qs("#live-subtask-progress-label");
     if (prog) {
       prog.innerHTML =
         '<span class="pct">' + escapeHtml(String(s.progress ?? "")) + "</span>% " + escapeHtml(tr("complete"));
     }
-    const progressInput = qs("#live-subtask-progress-input");
+    var progressInput = qs("#live-subtask-progress-input");
     if (progressInput) progressInput.value = s.progress;
 
-    const statusSelect = qs("[data-subtask-status-select]");
+    var statusSelect = qs("[data-subtask-status-select]");
     if (statusSelect && statusSelect.value !== s.status) statusSelect.value = s.status;
 
-    const assigned = qs("#live-subtask-assigned");
+    var assigned = qs("#live-subtask-assigned");
     if (assigned) assigned.textContent = s.assigned_name ? tr("Assigned") + ": " + s.assigned_name : "";
   }
 
   function renderComments(comments) {
-    const comm = qs("#live-subtask-comments");
-    if (!comm || !comments) return;
-    if (!comments.length) {
+    var comm = qs("#live-subtask-comments");
+    if (!comm) return;
+    if (!comments || !comments.length) {
       comm.innerHTML = '<p class="text-muted mb-0">' + tr("No comments yet.") + "</p>";
       return;
     }
     comm.innerHTML = comments
-      .map(
-        (c) =>
+      .map(function (c) {
+        return (
           '<div class="border rounded-3 p-3 mb-2 bg-light">' +
           '<div class="d-flex justify-content-between gap-3">' +
           "<strong>" +
@@ -127,27 +127,28 @@
           escapeHtml(c.content || "").replace(/\n/g, "<br>") +
           "</div>" +
           "</div>"
-      )
+        );
+      })
       .join("");
   }
 
   function renderIssues(issues) {
-    const iss = qs("#live-subtask-issues");
-    if (!iss || !issues) return;
-    if (!issues.length) {
+    var iss = qs("#live-subtask-issues");
+    if (!iss) return;
+    if (!issues || !issues.length) {
       iss.innerHTML = '<p class="text-muted mb-0">' + tr("No issues reported.") + "</p>";
       return;
     }
     iss.innerHTML = issues
-      .map((i) => {
-        const badge =
+      .map(function (i) {
+        var badge =
           i.status === "Resolved"
             ? '<span class="badge text-bg-success">' + tr("Resolved") + "</span>"
             : '<span class="badge text-bg-danger">' + tr("Open") + "</span>";
-        const desc = i.description
+        var desc = i.description
           ? '<div class="mt-2 text-muted">' + escapeHtml(i.description).replace(/\n/g, "<br>") + "</div>"
           : "";
-        const resolveForm =
+        var resolveForm =
           i.status !== "Resolved"
             ? '<form method="POST" action="/issues/' +
               i.id +
@@ -189,17 +190,17 @@
   }
 
   function renderAttachments(attachments) {
-    const ulAtt = qs("#live-subtask-attachments");
-    const emptyAtt = qs("#live-subtask-attachments-empty");
-    if (!ulAtt || !emptyAtt || !attachments) return;
+    var ulAtt = qs("#live-subtask-attachments");
+    var emptyAtt = qs("#live-subtask-attachments-empty");
+    if (!ulAtt || !emptyAtt) return;
     ulAtt.innerHTML = "";
-    if (!attachments.length) {
+    if (!attachments || !attachments.length) {
       emptyAtt.classList.remove("d-none");
       return;
     }
     emptyAtt.classList.add("d-none");
-    attachments.forEach((a) => {
-      const li = document.createElement("li");
+    attachments.forEach(function (a) {
+      var li = document.createElement("li");
       li.className = "list-group-item d-flex justify-content-between align-items-center px-0";
       li.innerHTML =
         '<div class="min-w-0">' +
@@ -221,7 +222,7 @@
   }
 
   function activityItemHtml(a, isNew) {
-    const meta = activityMeta(a.action);
+    var meta = activityMeta(a.action);
     return (
       '<li class="hr-timeline-item' +
       (isNew ? " hr-timeline-item-new" : "") +
@@ -255,45 +256,48 @@
 
   function renderActivityPagination(payload) {
     if (!payload || payload.pages <= 1) return "";
-    const item = (page, text, disabled, active) =>
-      '<li class="page-item ' +
-      (disabled ? "disabled " : "") +
-      (active ? "active" : "") +
-      '">' +
-      '<a class="page-link" href="/subtask/' +
-      SUBTASK_ID +
-      "?activity_page=" +
-      page +
-      '" data-activity-page-link="' +
-      page +
-      '">' +
-      text +
-      "</a></li>";
+    var itemFn = function (page, text, disabled, active) {
+      return (
+        '<li class="page-item ' +
+        (disabled ? "disabled " : "") +
+        (active ? "active" : "") +
+        '">' +
+        '<a class="page-link" href="/subtask/' +
+        SUBTASK_ID +
+        "?activity_page=" +
+        page +
+        '" data-activity-page-link="' +
+        page +
+        '">' +
+        text +
+        "</a></li>"
+      );
+    };
 
-    let html =
+    var html =
       '<nav class="mt-3" id="live-subtask-activity-pagination"><ul class="pagination pagination-sm">';
-    html += item(payload.prev_num || 1, tr("Prev"), !payload.has_prev, false);
-    for (let page = 1; page <= payload.pages; page += 1) {
-      html += item(page, page, false, page === payload.page);
+    html += itemFn(payload.prev_num || 1, tr("Prev"), !payload.has_prev, false);
+    for (var page = 1; page <= payload.pages; page += 1) {
+      html += itemFn(page, page, false, page === payload.page);
     }
-    html += item(payload.next_num || payload.pages, tr("Next"), !payload.has_next, false);
+    html += itemFn(payload.next_num || payload.pages, tr("Next"), !payload.has_next, false);
     html += "</ul></nav>";
     return html;
   }
 
   function renderActivities(payload, opts) {
-    const wrap = qs("#live-subtask-activities-wrap");
+    var wrap = qs("#live-subtask-activities-wrap");
     if (!wrap || !payload) return;
-    const options = opts || {};
+    var options = opts || {};
     wrap.dataset.activityPage = String(payload.page || 1);
-    const items = payload.items || [];
+    var items = payload.items || [];
     if (!items.length) {
       wrap.innerHTML = '<p class="text-muted mb-0">' + tr("No activity recorded.") + "</p>";
       return;
     }
     wrap.innerHTML =
       '<ul class="hr-timeline" id="live-subtask-activities">' +
-      items.map((a, index) => activityItemHtml(a, options.highlightFirst && index === 0)).join("") +
+      items.map(function (a, index) { return activityItemHtml(a, options.highlightFirst && index === 0); }).join("") +
       "</ul>" +
       renderActivityPagination(payload);
   }
@@ -308,128 +312,175 @@
   }
 
   function fetchSections(sections, options) {
-    const params = new URLSearchParams();
+    var params = new URLSearchParams();
     params.set("sections", normalizeSections(sections).join(","));
     if (options && options.activityPage) params.set("activity_page", String(options.activityPage));
     return fetch("/api/subtask/" + SUBTASK_ID + "/live?" + params.toString(), { credentials: "same-origin" })
-      .then((r) => {
+      .then(function (r) {
         if (!r.ok) throw new Error("Fetch failed");
         return r.json();
       })
-      .then((payload) => {
+      .then(function (payload) {
         renderPayload(payload, options);
         return payload;
       });
   }
 
   function scheduleRefresh(sections) {
-    normalizeSections(sections).forEach((section) => pendingSections.add(section));
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
-      const list = Array.from(pendingSections);
-      pendingSections.clear();
-      fetchSections(list, { activityPage: currentActivityPage(), highlightFirst: list.includes("activities") }).catch(
-        () => {}
-      );
-    }, 220);
+    try {
+      normalizeSections(sections).forEach(function (section) { pendingSections.add(section); });
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(function () {
+        try {
+          var list = Array.from(pendingSections);
+          pendingSections.clear();
+          fetchSections(list, { activityPage: currentActivityPage(), highlightFirst: list.indexOf("activities") !== -1 }).catch(
+            function () {}
+          );
+        } catch (e) {
+          console.warn("subtask_detail refresh timer error:", e);
+        }
+      }, 220);
+    } catch (e) {
+      console.warn("subtask_detail scheduleRefresh error:", e);
+    }
   }
 
   function clearSuccessfulForm(form) {
     if (form.matches('[data-success-sections*="comments"]')) {
-      const content = qs('textarea[name="content"]', form);
+      var content = qs('textarea[name="content"]', form);
       if (content) content.value = "";
     }
-    if (form.matches('[data-success-sections*="issues"]') && !form.action.includes("/resolve")) {
+    if (form.matches('[data-success-sections*="issues"]') && form.action.indexOf("/resolve") === -1) {
       form.reset();
     }
   }
 
-  document.addEventListener("submit", (e) => {
-    const form = e.target;
-    if (!(form instanceof HTMLFormElement) || !form.matches("[data-ajax-form]")) return;
+  document.addEventListener("submit", function (e) {
+    try {
+      var form = e.target;
+      if (!(form instanceof HTMLFormElement) || !form.matches("[data-ajax-form]")) return;
 
-    e.preventDefault();
-    setButtonLoading(form, true);
-
-    fetch(form.action, {
-      method: form.method || "POST",
-      body: new FormData(form),
-      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
-      credentials: "same-origin",
-    })
-      .then((r) =>
-        r.json().then((data) => {
-          if (!r.ok) throw data;
-          return data;
-        })
-      )
-      .then(() => {
-        scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
-        clearSuccessfulForm(form);
-        toast(form.dataset.successMessage || tr("Saved."));
-      })
-      .catch((err) => {
-        toast((err && (err.error || err.message)) || tr("Unable to save changes."), "danger");
-        scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
-      })
-      .finally(() => setButtonLoading(form, false));
-  });
-
-  const statusForm = qs("[data-subtask-status-form]");
-  if (statusForm) {
-    statusForm.addEventListener("submit", (e) => {
-      // Keep default POST route working, but prefer AJAX.
       e.preventDefault();
-      e.stopPropagation();
-      setButtonLoading(statusForm, true);
-      fetch(statusForm.action, {
-        method: statusForm.method || "POST",
-        body: new FormData(statusForm),
+      setButtonLoading(form, true);
+
+      fetch(form.action, {
+        method: form.method || "POST",
+        body: new FormData(form),
         headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
         credentials: "same-origin",
       })
-        .then(async (r) => {
-         const contentType =
-            r.headers.get("Content-Type") || "";
-          if (contentType.includes("application/json")) {
-            const text = await r.text();
-            console.error("Server returned HTML:", text);
-            throw { error:"Server returned invalid response." };
-          }
-
-          const data = await r.json();
-          if (!r.ok) throw data;
-          return data;
+        .then(function (r) {
+          return r.json().then(function (data) {
+            if (!r.ok) throw data;
+            return data;
+          });
         })
+        .then(function () {
+          scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
+          clearSuccessfulForm(form);
+          toast(form.dataset.successMessage || tr("Saved."));
+        })
+        .catch(function (err) {
+          toast((err && (err.error || err.message)) || tr("Unable to save changes."), "danger");
+          scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
+        })
+        .finally(function () { setButtonLoading(form, false); });
+    } catch (e) {
+      console.warn("subtask_detail submit error:", e);
+    }
+  });
 
-  document.addEventListener("click", (e) => {
-    const link = e.target.closest("[data-activity-page-link]");
-    if (!link || link.closest(".disabled")) return;
-    e.preventDefault();
-    const page = Number(link.dataset.activityPageLink || 1) || 1;
-    fetchSections(["activities"], { activityPage: page }).catch(() => toast(tr("Unable to load activity history."), "danger"));
+  var statusForm = qs("[data-subtask-status-form]");
+  if (statusForm) {
+    statusForm.addEventListener("submit", function (e) {
+      try {
+        // Keep default POST route working, but prefer AJAX.
+        e.preventDefault();
+        e.stopPropagation();
+        setButtonLoading(statusForm, true);
+        fetch(statusForm.action, {
+          method: statusForm.method || "POST",
+          body: new FormData(statusForm),
+          headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+          credentials: "same-origin",
+        })
+          .then(async function (r) {
+            var contentType = r.headers.get("Content-Type") || "";
+            
+            if (contentType.indexOf("application/json") === -1) {
+              var text = await r.text();
+              console.error("Server returned HTML:", text);
+              throw { error: "Server returned invalid response." };
+            }
+
+            var data = await r.json();
+            if (!r.ok) throw data;
+            return data;
+          })
+          .then(function () {
+            scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
+            toast(tr("Status updated."));
+          })
+          .catch(function (err) {
+            toast((err && (err.error || err.message)) || tr("Unable to update status."), "danger");
+          })
+          .finally(function () { setButtonLoading(statusForm, false); });
+      } catch (e) {
+        console.warn("subtask_detail status form error:", e);
+      }
+    });
+  }
+
+  document.addEventListener("click", function (e) {
+    try {
+      var link = e.target.closest("[data-activity-page-link]");
+      if (!link || (link.closest(".disabled"))) return;
+      e.preventDefault();
+      var page = Number(link.dataset.activityPageLink || 1) || 1;
+      fetchSections(["activities"], { activityPage: page }).catch(function () { toast(tr("Unable to load activity history."), "danger"); });
+    } catch (e) {
+      console.warn("subtask_detail pagination click error:", e);
+    }
   });
 
   // Realtime: listen to parent task updates and refresh this subtask sections.
   if (window.io && TASK_ID) {
-    const socket = io({ transports: ["websocket", "polling"] });
-    socket.on("connect", () => socket.emit("join_task", { task_id: TASK_ID }));
-    socket.on("task_live_update", (msg) => {
-      if (msg && msg.task_id === TASK_ID) scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
-    });
-    socket.on("task_removed", (msg) => {
-      if (msg && msg.task_id === TASK_ID) window.location.href = "/tasks";
-    });
-    window.addEventListener("beforeunload", () => {
-      try {
-        socket.emit("leave_task", { task_id: TASK_ID });
-      } catch (_) {}
-    });
+    try {
+      var socket = io({ transports: ["websocket", "polling"] });
+      socket.on("connect", function () {
+        try {
+          socket.emit("join_task", { task_id: TASK_ID });
+        } catch (e) {
+          console.warn("subtask socket connect error:", e);
+        }
+      });
+      socket.on("task_live_update", function (msg) {
+        try {
+          if (msg && msg.task_id === TASK_ID) scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);
+        } catch (e) {
+          console.warn("subtask socket task_live_update error:", e);
+        }
+      });
+      socket.on("task_removed", function (msg) {
+        try {
+          if (msg && msg.task_id === TASK_ID) window.location.href = "/tasks";
+        } catch (e) {
+          console.warn("subtask socket task_removed error:", e);
+        }
+      });
+      window.addEventListener("beforeunload", function () {
+        try {
+          socket.emit("leave_task", { task_id: TASK_ID });
+        } catch (_) {}
+      });
+    } catch (e) {
+      console.warn("subtask_detail socket init error:", e);
+    }
   }
 
   // Also react to global bus (dashboard/tasks/kanban use this).
   if (window.HR_LIVE) {
-    window.HR_LIVE.onGlobalChange(() => scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]));
+    window.HR_LIVE.onGlobalChange(function () { scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]); });
   }
 })();
-

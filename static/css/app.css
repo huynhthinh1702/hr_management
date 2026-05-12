@@ -418,6 +418,64 @@ textarea.form-control {
   border-radius: 12px;
 }
 
+/* ===== TASK & SUBTASK DETAIL MOBILE ===== */
+@media (max-width: 767.98px) {
+  #taskDetailPage .row.g-4,
+  #subtaskDetailPage .row.g-4 {
+    --bs-gutter-y: 0;
+  }
+
+  #taskDetailPage .card,
+  #subtaskDetailPage .card {
+    margin-bottom: 14px !important;
+  }
+
+  #taskDetailPage .card-body,
+  #subtaskDetailPage .card-body {
+    padding: 14px;
+  }
+
+  #taskDetailPage h4,
+  #subtaskDetailPage h4 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+
+  #taskDetailPage table.table,
+  #subtaskDetailPage table.table {
+    font-size: 13px;
+  }
+
+  #taskDetailPage table.table .btn,
+  #subtaskDetailPage table.table .btn {
+    font-size: 11px;
+    padding: 4px 8px;
+    min-height: 28px;
+  }
+
+  #taskDetailPage table.table td,
+  #subtaskDetailPage table.table td {
+    padding: 6px 8px;
+  }
+
+  #taskDetailPage .d-flex.flex-wrap.gap-2,
+  #subtaskDetailPage .d-flex.flex-wrap.gap-2 {
+    gap: 6px !important;
+  }
+
+  #taskDetailPage .form-select-sm,
+  #subtaskDetailPage .form-select-sm {
+    font-size: 13px;
+    padding: 4px 8px;
+  }
+
+  #taskDetailPage .btn-sm,
+  #subtaskDetailPage .btn-sm {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+}
+
 @media (max-width: 575.98px) {
   .app-navbar {
     height: auto;

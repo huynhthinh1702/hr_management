@@ -1,21 +1,21 @@
 // Task detail: section-scoped AJAX + per-task realtime updates.
 (function () {
-  const root = document.getElementById("taskDetailPage");
+  var root = document.getElementById("taskDetailPage");
   if (!root) return;
 
-  const TASK_ID = Number(root.dataset.taskId || 0);
+  var TASK_ID = Number(root.dataset.taskId || 0);
   if (!TASK_ID) return;
 
-  const VALID_SECTIONS = ["task", "subtasks", "comments", "attachments", "issues", "activities"];
-  const pendingSections = new Set();
-  let refreshTimer;
+  var VALID_SECTIONS = ["task", "subtasks", "comments", "attachments", "issues", "activities"];
+  var pendingSections = new Set();
+  var refreshTimer;
 
   function qs(sel, base) {
     return (base || document).querySelector(sel);
   }
 
   function escapeHtml(text) {
-    const div = document.createElement("div");
+    var div = document.createElement("div");
     div.textContent = text == null ? "" : String(text);
     return div.innerHTML;
   }
@@ -31,13 +31,13 @@
   }
 
   function badgeForStatus(status) {
-    const map = { Completed: "success", "In Progress": "primary", Pending: "secondary" };
-    const cls = map[status] || "secondary";
+    var map = { Completed: "success", "In Progress": "primary", Pending: "secondary" };
+    var cls = map[status] || "secondary";
     return "badge rounded-pill bg-" + cls;
   }
 
   function activityMeta(action) {
-    const a = (action || "").toLowerCase();
+    var a = (action || "").toLowerCase();
     if (a.includes("comment")) return { dot: "hr-dot-comment", icon: "bi-chat-dots" };
     if (a.includes("upload")) return { dot: "hr-dot-upload", icon: "bi-paperclip" };
     if (a.includes("completed")) return { dot: "hr-dot-complete", icon: "bi-check2-circle" };
@@ -48,16 +48,16 @@
 
   function normalizeSections(sections) {
     if (!sections || !sections.length) return VALID_SECTIONS.slice();
-    return sections.filter((section) => VALID_SECTIONS.includes(section));
+    return sections.filter(function (section) { return VALID_SECTIONS.indexOf(section) !== -1; });
   }
 
   function currentActivityPage() {
-    const wrap = qs("#live-activities-wrap");
+    var wrap = qs("#live-activities-wrap");
     return Number((wrap && wrap.dataset.activityPage) || 1) || 1;
   }
 
   function setButtonLoading(form, isLoading) {
-    const btn = qs('button[type="submit"]', form) || qs("button", form);
+    var btn = qs('button[type="submit"]', form) || qs("button", form);
     if (!btn) return;
 
     if (isLoading) {
@@ -79,14 +79,19 @@
 
   function renderTask(t) {
     if (!t) return;
-    qs("#live-task-title").textContent = t.title;
-    qs("#live-task-description").textContent = t.description;
+    var titleEl = qs("#live-task-title");
+    if (titleEl) titleEl.textContent = t.title;
 
-    const st = qs("#live-task-status");
-    st.textContent = tr(t.status);
-    st.className = badgeForStatus(t.status);
+    var descEl = qs("#live-task-description");
+    if (descEl) descEl.textContent = t.description;
 
-    const progLabel = qs("#live-task-progress-label");
+    var st = qs("#live-task-status");
+    if (st) {
+      st.textContent = tr(t.status);
+      st.className = badgeForStatus(t.status);
+    }
+
+    var progLabel = qs("#live-task-progress-label");
     if (progLabel) {
       progLabel.innerHTML =
         '<span class="pct">' +
@@ -94,32 +99,41 @@
         "</span>% " +
         escapeHtml(tr("complete"));
     }
-    const progressInput = qs("#live-task-progress-input");
+    var progressInput = qs("#live-task-progress-input");
     if (progressInput) progressInput.value = t.progress;
-    const pr = qs("#live-task-priority");
-    if (pr) pr.textContent = t.priority ? tr(t.priority + " priority") : "";
 
-    const statusSelect = qs("[data-task-status-select]");
+    var pr = qs("#live-task-priority");
+    if (pr) {
+      if (t.priority) {
+        pr.textContent = t.priority === "High" ? tr("High priority") : t.priority === "Medium" ? tr("Medium priority") : tr("Low priority");
+      } else {
+        pr.textContent = "";
+      }
+    }
+
+    var statusSelect = qs("[data-task-status-select]");
     if (statusSelect && statusSelect.value !== t.status) statusSelect.value = t.status;
   }
 
   function renderSubtasks(subtasks) {
-    const subBody = qs("#live-subtasks-tbody");
-    if (!subBody || !subtasks) return;
+    var subBody = qs("#live-subtasks-tbody");
+    if (!subBody) return;
     subBody.innerHTML = "";
-    if (!subtasks.length) {
-      subBody.innerHTML = '<tr><td colspan="5" class="text-muted">' + tr("No subtasks yet.") + "</td></tr>";
+    if (!subtasks || !subtasks.length) {
+      subBody.innerHTML = '<tr><td colspan="6" class="text-muted">' + tr("No subtasks yet.") + "</td></tr>";
       return;
     }
 
-    subtasks.forEach((s) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML =
+    subtasks.forEach(function (s) {
+      var row = document.createElement("tr");
+      var assignedName = s.assigned_name || "";
+      row.innerHTML =
         "<td>" +
         s.id +
         "</td>" +
         "<td>" +
-        escapeHtml(s.title) +
+        '<a href="/subtask/' + s.id + '" class="text-decoration-none">' + escapeHtml(s.title) + '</a>' +
+        '<span class="badge bg-info ms-2">Subtask</span>' +
         "</td>" +
         "<td>" +
         escapeHtml(tr(s.status)) +
@@ -128,9 +142,17 @@
         s.progress +
         "%</td>" +
         "<td>" +
+        escapeHtml(assignedName) +
+        "</td>" +
+        "<td>" +
+        '<a href="/subtask/' +
+        s.id +
+        '" class="btn btn-primary btn-sm">' +
+        tr("View") +
+        "</a> " +
         '<a href="/update-subtask/' +
         s.id +
-        '" class="btn btn-outline-primary btn-sm">' +
+        '" class="btn btn-warning btn-sm">' +
         tr("Update") +
         "</a> " +
         '<form method="POST" action="/delete-subtask/' +
@@ -139,7 +161,7 @@
         '<input type="hidden" name="csrf_token" value="' +
         escapeHtml(window.HR_CSRF || "") +
         '">' +
-        '<button type="button" class="btn btn-outline-danger btn-sm" data-confirm="' +
+        '<button type="button" class="btn btn-danger btn-sm" data-confirm="' +
         escapeHtml(tr("Delete this subtask?")) +
         '" data-confirm-ok="' +
         escapeHtml(tr("Delete")) +
@@ -148,20 +170,20 @@
         "</button>" +
         "</form>" +
         "</td>";
-      subBody.appendChild(tr);
+      subBody.appendChild(row);
     });
   }
 
   function renderComments(comments) {
-    const comm = qs("#live-comments");
-    if (!comm || !comments) return;
-    if (!comments.length) {
+    var comm = qs("#live-comments");
+    if (!comm) return;
+    if (!comments || !comments.length) {
       comm.innerHTML = '<p class="text-muted mb-0">' + tr("No comments yet.") + "</p>";
       return;
     }
     comm.innerHTML = comments
-      .map(
-        (c) =>
+      .map(function (c) {
+        return (
           '<div class="border rounded-3 p-3 mb-2 bg-light">' +
           '<div class="d-flex justify-content-between gap-3">' +
           "<strong>" +
@@ -175,27 +197,28 @@
           escapeHtml(c.content).replace(/\n/g, "<br>") +
           "</div>" +
           "</div>"
-      )
+        );
+      })
       .join("");
   }
 
   function renderIssues(issues) {
-    const iss = qs("#live-issues");
-    if (!iss || !issues) return;
-    if (!issues.length) {
+    var iss = qs("#live-issues");
+    if (!iss) return;
+    if (!issues || !issues.length) {
       iss.innerHTML = '<p class="text-muted mb-0">' + tr("No issues reported.") + "</p>";
       return;
     }
     iss.innerHTML = issues
-      .map((i) => {
-        const badge =
+      .map(function (i) {
+        var badge =
           i.status === "Resolved"
             ? '<span class="badge text-bg-success">' + tr("Resolved") + "</span>"
             : '<span class="badge text-bg-danger">' + tr("Open") + "</span>";
-        const desc = i.description
+        var desc = i.description
           ? '<div class="mt-2 text-muted">' + escapeHtml(i.description).replace(/\n/g, "<br>") + "</div>"
           : "";
-        const resolveForm =
+        var resolveForm =
           i.status !== "Resolved"
             ? '<form method="POST" action="/issues/' +
               i.id +
@@ -237,18 +260,18 @@
   }
 
   function renderAttachments(attachments) {
-    const ulAtt = qs("#live-attachments");
-    const emptyAtt = qs("#live-attachments-empty");
-    if (!ulAtt || !emptyAtt || !attachments) return;
+    var ulAtt = qs("#live-attachments");
+    var emptyAtt = qs("#live-attachments-empty");
+    if (!ulAtt || !emptyAtt) return;
     ulAtt.innerHTML = "";
-    if (!attachments.length) {
+    if (!attachments || !attachments.length) {
       emptyAtt.classList.remove("d-none");
       return;
     }
 
     emptyAtt.classList.add("d-none");
-    attachments.forEach((a) => {
-      const li = document.createElement("li");
+    attachments.forEach(function (a) {
+      var li = document.createElement("li");
       li.className = "list-group-item d-flex justify-content-between align-items-center px-0";
       li.innerHTML =
         '<div class="min-w-0">' +
@@ -266,7 +289,7 @@
   }
 
   function activityItemHtml(a, isNew) {
-    const meta = activityMeta(a.action);
+    var meta = activityMeta(a.action);
     return (
       '<li class="hr-timeline-item' +
       (isNew ? " hr-timeline-item-new" : "") +
@@ -300,40 +323,41 @@
 
   function renderActivityPagination(payload) {
     if (!payload || payload.pages <= 1) return "";
-
-    const item = (page, text, disabled, active) =>
-      '<li class="page-item ' +
-      (disabled ? "disabled " : "") +
-      (active ? "active" : "") +
-      '">' +
-      '<a class="page-link" href="/task/' +
-      TASK_ID +
-      "?activity_page=" +
-      page +
-      '" data-activity-page-link="' +
-      page +
-      '">' +
-      text +
-      "</a></li>";
-
-    let html = '<nav class="mt-3" id="live-activity-pagination"><ul class="pagination pagination-sm">';
-    html += item(payload.prev_num || 1, tr("Prev"), !payload.has_prev, false);
-    for (let page = 1; page <= payload.pages; page += 1) {
-      html += item(page, page, false, page === payload.page);
+    var itemFn = function (page, text, disabled, active) {
+      return (
+        '<li class="page-item ' +
+        (disabled ? "disabled " : "") +
+        (active ? "active" : "") +
+        '">' +
+        '<a class="page-link" href="/task/' +
+        TASK_ID +
+        "?activity_page=" +
+        page +
+        '" data-activity-page-link="' +
+        page +
+        '">' +
+        text +
+        "</a></li>"
+      );
+    };
+    var html = '<nav class="mt-3" id="live-activity-pagination"><ul class="pagination pagination-sm">';
+    html += itemFn(payload.prev_num || 1, tr("Prev"), !payload.has_prev, false);
+    for (var page = 1; page <= payload.pages; page += 1) {
+      html += itemFn(page, page, false, page === payload.page);
     }
-    html += item(payload.next_num || payload.pages, tr("Next"), !payload.has_next, false);
+    html += itemFn(payload.next_num || payload.pages, tr("Next"), !payload.has_next, false);
     html += "</ul></nav>";
     return html;
   }
 
   function renderActivities(payload, opts) {
-    const wrap = qs("#live-activities-wrap");
+    var wrap = qs("#live-activities-wrap");
     if (!wrap || !payload) return;
 
-    const options = opts || {};
+    var options = opts || {};
     wrap.dataset.activityPage = String(payload.page || 1);
 
-    const items = payload.items || [];
+    var items = payload.items || [];
     if (!items.length) {
       wrap.innerHTML =
         '<p class="text-muted mb-0" id="live-activities-empty">' + tr("No activity recorded.") + "</p>";
@@ -342,7 +366,7 @@
 
     wrap.innerHTML =
       '<ul class="hr-timeline" id="live-activities">' +
-      items.map((a, index) => activityItemHtml(a, options.highlightFirst && index === 0)).join("") +
+      items.map(function (a, index) { return activityItemHtml(a, options.highlightFirst && index === 0); }).join("") +
       "</ul>" +
       renderActivityPagination(payload);
   }
@@ -358,162 +382,205 @@
   }
 
   function fetchSections(sections, options) {
-    const params = new URLSearchParams();
+    var params = new URLSearchParams();
     params.set("sections", normalizeSections(sections).join(","));
     if (options && options.activityPage) params.set("activity_page", String(options.activityPage));
 
     return fetch("/api/task/" + TASK_ID + "/live?" + params.toString(), { credentials: "same-origin" })
-      .then((r) => {
+      .then(function (r) {
         if (!r.ok) throw new Error("Fetch failed");
         return r.json();
       })
-      .then((payload) => {
+      .then(function (payload) {
         renderPayload(payload, options);
         return payload;
       });
   }
 
   function scheduleRefresh(sections) {
-    normalizeSections(sections).forEach((section) => pendingSections.add(section));
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
-      const list = Array.from(pendingSections);
-      pendingSections.clear();
+    try {
+      normalizeSections(sections).forEach(function (section) { pendingSections.add(section); });
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(function () {
+        try {
+          var list = Array.from(pendingSections);
+          pendingSections.clear();
 
-      if (list.includes("activities") && currentActivityPage() !== 1) {
-        const note = qs("#live-activity-new-note");
-        if (note) note.classList.remove("d-none");
-        const otherSections = list.filter((section) => section !== "activities");
-        if (!otherSections.length) return;
-        fetchSections(otherSections).catch(() => {});
-        return;
-      }
+          if (list.indexOf("activities") !== -1 && currentActivityPage() !== 1) {
+            var note = qs("#live-activity-new-note");
+            if (note) note.classList.remove("d-none");
+            var otherSections = list.filter(function (section) { return section !== "activities"; });
+            if (!otherSections.length) return;
+            fetchSections(otherSections).catch(function () {});
+            return;
+          }
 
-      fetchSections(list, { activityPage: currentActivityPage(), highlightFirst: list.includes("activities") }).catch(
-        () => {}
-      );
-    }, 220);
+          fetchSections(list, { activityPage: currentActivityPage(), highlightFirst: list.indexOf("activities") !== -1 }).catch(
+            function () {}
+          );
+        } catch (e) {
+          console.warn("task_detail refresh timer error:", e);
+        }
+      }, 220);
+    } catch (e) {
+      console.warn("task_detail scheduleRefresh error:", e);
+    }
   }
 
   function clearSuccessfulForm(form) {
     if (form.matches('[data-success-sections*="comments"]')) {
-      const content = qs('textarea[name="content"]', form);
+      var content = qs('textarea[name="content"]', form);
       if (content) content.value = "";
     }
-    if (form.matches('[data-success-sections*="issues"]') && form.action.includes("/issues") && !form.action.includes("/resolve")) {
+    if (form.matches('[data-success-sections*="issues"]') && form.action.indexOf("/issues") !== -1 && form.action.indexOf("/resolve") === -1) {
       form.reset();
     }
   }
 
-  document.addEventListener("submit", (e) => {
-    const form = e.target;
-    if (!(form instanceof HTMLFormElement) || !form.matches("[data-ajax-form]")) return;
+  document.addEventListener("submit", function (e) {
+    try {
+      var form = e.target;
+      if (!(form instanceof HTMLFormElement) || !form.matches("[data-ajax-form]")) return;
 
-    e.preventDefault();
-    setButtonLoading(form, true);
-
-    const sections = (form.dataset.successSections || "").split(",").map((s) => s.trim()).filter(Boolean);
-    fetch(form.action, {
-      method: form.method || "POST",
-      body: new FormData(form),
-      headers: {
-        Accept: "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      credentials: "same-origin",
-    })
-      .then((r) =>
-        r.json().then((data) => {
-          if (!r.ok) throw data;
-          return data;
-        })
-      )
-      .then((data) => {
-        renderPayload(data.payload || {}, { activityPage: 1, highlightFirst: true });
-        clearSuccessfulForm(form);
-        const note = qs("#live-activity-new-note");
-        if (note) note.classList.add("d-none");
-        toast(data.message || form.dataset.successMessage || tr("Saved."));
-      })
-      .catch((err) => {
-        toast((err && (err.error || err.message)) || tr("Unable to save changes."), "danger");
-        if (sections.length) scheduleRefresh(sections);
-      })
-      .finally(() => setButtonLoading(form, false));
-  });
-
-  const statusForm = qs("[data-task-status-form]");
-  if (statusForm) {
-    statusForm.addEventListener("submit", (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      const statusSelect = qs("[data-task-status-select]", statusForm);
-      const status = statusSelect ? statusSelect.value : "";
-      setButtonLoading(statusForm, true);
+      setButtonLoading(form, true);
 
-      fetch("/update-status/" + TASK_ID, {
-        method: "POST",
+      var sections = (form.dataset.successSections || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+      fetch(form.action, {
+        method: form.method || "POST",
+        body: new FormData(form),
         headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": window.HR_CSRF || "",
           Accept: "application/json",
           "X-Requested-With": "XMLHttpRequest",
         },
-        body: JSON.stringify({ status }),
         credentials: "same-origin",
       })
-        .then((r) =>
-          r.json().then((data) => {
+        .then(function (r) {
+          return r.json().then(function (data) {
             if (!r.ok) throw data;
             return data;
-          })
-        )
-        .then((data) => {
+          });
+        })
+        .then(function (data) {
           renderPayload(data.payload || {}, { activityPage: 1, highlightFirst: true });
-          const note = qs("#live-activity-new-note");
+          clearSuccessfulForm(form);
+          var note = qs("#live-activity-new-note");
           if (note) note.classList.add("d-none");
-          toast(tr("Status updated."));
+          toast(data.message || form.dataset.successMessage || tr("Saved."));
         })
-        .catch((err) => {
-          toast((err && (err.error || err.message)) || tr("Unable to update status."), "danger");
+        .catch(function (err) {
+          toast((err && (err.error || err.message)) || tr("Unable to save changes."), "danger");
+          if (sections.length) scheduleRefresh(sections);
         })
-        .finally(() => setButtonLoading(statusForm, false));
-    });
-  }
-
-  document.addEventListener("click", (e) => {
-    const link = e.target.closest("[data-activity-page-link]");
-    if (!link || link.closest(".disabled")) return;
-
-    e.preventDefault();
-    const page = Number(link.dataset.activityPageLink || 1) || 1;
-    fetchSections(["activities"], { activityPage: page }).catch(() => {
-      toast(tr("Unable to load activity history."), "danger");
-    });
+        .finally(function () { setButtonLoading(form, false); });
+    } catch (e) {
+      console.warn("task_detail submit error:", e);
+    }
   });
 
-  const newActivityNote = qs("#live-activity-new-note");
-  if (newActivityNote) {
-    newActivityNote.addEventListener("click", () => {
-      fetchSections(["activities"], { activityPage: 1, highlightFirst: true })
-        .then(() => newActivityNote.classList.add("d-none"))
-        .catch(() => toast(tr("Unable to load latest activity."), "danger"));
+  var statusForm = qs("[data-task-status-form]");
+  if (statusForm) {
+    statusForm.addEventListener("submit", function (e) {
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+        var statusSelect = qs("[data-task-status-select]", statusForm);
+        var status = statusSelect ? statusSelect.value : "";
+        setButtonLoading(statusForm, true);
+
+        fetch("/update-status/" + TASK_ID, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": window.HR_CSRF || "",
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: JSON.stringify({ status: status }),
+          credentials: "same-origin",
+        })
+          .then(function (r) {
+            return r.json().then(function (data) {
+              if (!r.ok) throw data;
+              return data;
+            });
+          })
+          .then(function (data) {
+            renderPayload(data.payload || {}, { activityPage: 1, highlightFirst: true });
+            var note = qs("#live-activity-new-note");
+            if (note) note.classList.add("d-none");
+            toast(tr("Status updated."));
+          })
+          .catch(function (err) {
+            toast((err && (err.error || err.message)) || tr("Unable to update status."), "danger");
+          })
+          .finally(function () { setButtonLoading(statusForm, false); });
+      } catch (e) {
+        console.warn("task_detail status form error:", e);
+      }
     });
   }
 
-  if (window.io) {
-    const socket = io({ transports: ["websocket", "polling"] });
-    socket.on("connect", () => socket.emit("join_task", { task_id: TASK_ID }));
-    socket.on("task_live_update", (msg) => {
-      if (msg && msg.task_id === TASK_ID) scheduleRefresh(msg.sections);
-    });
-    socket.on("task_removed", (msg) => {
-      if (msg && msg.task_id === TASK_ID) window.location.href = "/tasks";
-    });
-    window.addEventListener("beforeunload", () => {
+  document.addEventListener("click", function (e) {
+    try {
+      var link = e.target.closest("[data-activity-page-link]");
+      if (!link || (link.closest(".disabled"))) return;
+
+      e.preventDefault();
+      var page = Number(link.dataset.activityPageLink || 1) || 1;
+      fetchSections(["activities"], { activityPage: page }).catch(function () {
+        toast(tr("Unable to load activity history."), "danger");
+      });
+    } catch (e) {
+      console.warn("task_detail pagination click error:", e);
+    }
+  });
+
+  var newActivityNote = qs("#live-activity-new-note");
+  if (newActivityNote) {
+    newActivityNote.addEventListener("click", function () {
       try {
-        socket.emit("leave_task", { task_id: TASK_ID });
-      } catch (_) {}
+        fetchSections(["activities"], { activityPage: 1, highlightFirst: true })
+          .then(function () { newActivityNote.classList.add("d-none"); })
+          .catch(function () { toast(tr("Unable to load latest activity."), "danger"); });
+      } catch (e) {
+        console.warn("task_detail activity note error:", e);
+      }
     });
+  }
+
+  // Realtime socket with error boundary
+  if (window.io) {
+    try {
+      var socket = io({ transports: ["websocket", "polling"] });
+      socket.on("connect", function () {
+        try {
+          socket.emit("join_task", { task_id: TASK_ID });
+        } catch (e) {
+          console.warn("socket join_task error:", e);
+        }
+      });
+      socket.on("task_live_update", function (msg) {
+        try {
+          if (msg && msg.task_id === TASK_ID) scheduleRefresh(msg.sections);
+        } catch (e) {
+          console.warn("socket task_live_update error:", e);
+        }
+      });
+      socket.on("task_removed", function (msg) {
+        try {
+          if (msg && msg.task_id === TASK_ID) window.location.href = "/tasks";
+        } catch (e) {
+          console.warn("socket task_removed error:", e);
+        }
+      });
+      window.addEventListener("beforeunload", function () {
+        try {
+          socket.emit("leave_task", { task_id: TASK_ID });
+        } catch (_) {}
+      });
+    } catch (e) {
+      console.warn("task_detail socket init error:", e);
+    }
   }
 })();

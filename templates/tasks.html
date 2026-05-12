@@ -265,6 +265,15 @@
 
         <td class="tasks-actions" data-label="Actions">
 
+            <a
+                href="/task/{{ task.id }}"
+                class="btn btn-primary btn-sm"
+                data-i18n="View"
+            >
+                View
+            </a>
+
+            {% if session.get("role") in ["manager", "admin", "director", "team_lead"] %}
             <form
                 method="POST"
                 action="/delete-task/{{ task.id }}"
@@ -289,14 +298,7 @@
                 </button>
 
             </form>
-
-            <a
-                href="/task/{{ task.id }}"
-                class="btn btn-primary btn-sm"
-                data-i18n="View"
-            >
-                View
-            </a>
+            {% endif %}
 
         </td>
 
