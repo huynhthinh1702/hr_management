@@ -132,6 +132,24 @@ UI_TRANSLATIONS = {
         "Comment added.": "Comment added.",
         "Issue reported.": "Issue reported.",
         "Issue resolved.": "Issue resolved.",
+        "Password reset request": "Password reset request",
+        "requested a reset to the default password.": "requested a reset to the default password.",
+        "Task assigned": "Task assigned",
+        "You were assigned to '{task.title}'.": "You were assigned to '{task.title}'.",
+        "Task completed": "Task completed",
+        "was marked completed.": "was marked completed.",
+        "Serious issue created": "Serious issue created",
+        "issue on": "issue on",
+        "Task overdue": "Task overdue",
+        "is past its deadline": "is past its deadline",
+        "Critical": "Critical",
+        "High": "High",
+        "Task": "Task",
+        "created": "created",
+        "updated": "updated",
+        "archived": "archived",
+        "deleted": "deleted",
+        "Subtask": "Subtask",
     },
     "vi": {
         "Notifications": "Thông báo",
@@ -207,6 +225,24 @@ UI_TRANSLATIONS = {
         "Comment added.": "Đã thêm bình luận.",
         "Issue reported.": "Đã báo cáo sự cố.",
         "Issue resolved.": "Đã xử lý sự cố.",
+        "Password reset request": "Yêu cầu đặt lại mật khẩu",
+        "requested a reset to the default password.": "đã yêu cầu đặt lại về mật khẩu mặc định.",
+        "Task assigned": "Công việc được giao",
+        "You were assigned to '{task.title}'.": "Bạn đã được giao công việc '{task.title}'.",
+        "Task completed": "Công việc đã hoàn thành",
+        "was marked completed.": "đã được đánh dấu hoàn thành.",
+        "Serious issue created": "Vấn đề nghiêm trọng đã được tạo",
+        "issue on": "Xuất hiện vấn đề",
+        "Task overdue": "Công việc quá hạn",
+        "is past its deadline": "đã quá hạn",
+        "Critical": "Nghiêm trọng",
+        "High": "Cao",
+        "Task": "Công việc",
+        "created": "được tạo",
+        "updated": "được cập nhật",
+        "archived": "được lưu trữ",
+        "deleted": "được xóa",
+        "Subtask": "Công việc con",
     },
 }
 
@@ -554,8 +590,8 @@ def notify_task_assigned(task, users):
         create_notification(
             user.id,
             "task_assigned",
-            "Task assigned",
-            f"You were assigned to '{task.title}'.",
+            translate_ui("Task assigned"),
+            translate_ui("You were assigned to '{task.title}'.").format(task=task),
             task_id=task.id,
             url=f"/task/{task.id}",
             actor_id=actor_id,
@@ -574,8 +610,8 @@ def notify_task_completed(task):
         create_notification(
             user_id,
             "task_completed",
-            "Task completed",
-            f"'{task.title}' was marked completed.",
+            translate_ui("Task completed"),
+            translate_ui("'{task.title}' was marked completed.").format(task=task),
             task_id=task.id,
             url=f"/task/{task.id}",
             actor_id=actor_id,
@@ -594,8 +630,8 @@ def notify_serious_issue(task, issue):
         create_notification(
             user_id,
             "serious_issue",
-            "Serious issue created",
-            f"{issue.severity} issue on '{task.title}': {issue.title}",
+            translate_ui("Serious issue created"),
+            f"{translate_ui(issue.severity)} issue on '{task.title}': {issue.title}",
             task_id=task.id,
             url=f"/task/{task.id}",
             actor_id=actor_id,
@@ -621,8 +657,8 @@ def notify_overdue_tasks_for_user(user):
             create_notification(
                 user.id,
                 "task_overdue",
-                "Task overdue",
-                f"'{task.title}' is past its deadline ({task.deadline}).",
+                translate_ui("Task overdue"),
+                translate_ui("'{task.title}' is past its deadline ({task.deadline}).").format(task=task),
                 task_id=task.id,
                 url=f"/task/{task.id}",
                 dedupe=True,
@@ -1330,8 +1366,8 @@ def forgot_password():
             create_notification(
                 admin_user.id,
                 "password_reset_request",
-                "Password reset request",
-                f"{user.full_name or user.username} ({user.email}) requested a reset to the default password.",
+                translate_ui("Password reset request"),
+                f"{user.full_name or user.username} ({user.email}) {translate_ui('requested a reset to the default password.')}",
                 url="/admin/users",
                 actor_id=user.id,
             )
@@ -1461,12 +1497,14 @@ def admin():
 def admin_users():
     if "user_id" not in session:
         return redirect("/login")
+    
     if not admin_required():
         return "Access Deinied"
 
     search = request.args.get("search", "").strip()
     role = request.args.get("role", "").strip()
     status = request.args.get("status", "").strip()
+    page = request.args.get("page", 1, type=int)
     query = User.query
 
     if search:
@@ -1485,8 +1523,10 @@ def admin_users():
     elif status == "active":
         query = query.filter(or_(User.is_locked.is_(False), User.is_locked.is_(None)))
 
-    users = query.order_by(User.id.desc()).all()
-    return render_template("admin_users.html", users=users)
+    pagination = query.order_by(User.id.desc()).paginate(page=page, per_page=10, error_out=False)
+
+    users = pagination.items
+    return render_template("admin_users.html", users=users, pagination=pagination)
 
 
 @app.route("/admin/users/<int:user_id>/edit", methods=["POST"])
@@ -1598,8 +1638,8 @@ def create_task():
         notify_task_assigned(new_task, users)
         log_activity(
             task_id=new_task.id,
-            action="Created task",
-            details=f"Task '{new_task.title}' created"
+            action=translate_ui("Created task"),
+            details=f"{translate_ui('Task')} '{new_task.title}' {translate_ui('created')}"
         )
         db.session.commit()
         notify_task_live(new_task.id)
@@ -1672,7 +1712,7 @@ def add_comment(task_id):
         content=content
     )
     db.session.add(comment)
-    log_activity(task_id, "Added comment", content[:120])
+    log_activity(task_id,  translate_ui("Added comment"), content[:120])
     db.session.commit()
     sections = ["comments", "activities"]
     notify_task_live(task_id, sections=sections)
@@ -1716,7 +1756,7 @@ def create_issue(task_id):
         creator_name=session["username"]
     )
     db.session.add(issue)
-    log_activity(task_id, "Created issue", title)
+    log_activity(task_id, translate_ui("Created issue"), title)
     task = Task.query.get(task_id)
     if task and severity in ["High", "Critical"]:
         notify_serious_issue(task, issue)
@@ -1756,7 +1796,7 @@ def resolve_issue(issue_id):
 
     issue.status = "Resolved"
     issue.resolved_at = datetime.utcnow()
-    log_activity(issue.task_id, "Resolved issue", issue.title)
+    log_activity(issue.task_id, translate_ui("Resolved issue"), issue.title)
     db.session.commit()
     socketio.emit("global_changed", {"type": "issue_resolved"})
     sections = ["issues", "activities"]
@@ -1826,7 +1866,7 @@ def upload_task_file(task_id):
         mime_type=uploaded_file.mimetype
     )
     db.session.add(attachment)
-    log_activity(task_id, "Uploaded file", safe_name)
+    log_activity(task_id, translate_ui("Uploaded file"), safe_name)
     db.session.commit()
     notify_task_live(task_id)
     notify_global_change(kind="task_updated", task_id=task_id)
@@ -1974,7 +2014,7 @@ def create_subtask(task_id):
             assigned_to=assigned_user.id if assigned_user else None,
         )
         db.session.add(new_subtask)
-        log_activity(task_id, "Created subtask", title)
+        log_activity(task_id, translate_ui("Created subtask"), title)
         db.session.commit()
         socketio.emit("global_changed", {"type":"subtask_created"})
         notify_task_live(task_id)
@@ -2054,7 +2094,7 @@ def add_subtask_comment(subtask_id):
         content=content,
     )
     db.session.add(comment)
-    log_subtask_activity(subtask.task_id, subtask.id, "Added comment (subtask)", content[:120])
+    log_subtask_activity(subtask.task_id, subtask.id, translate_ui("Added comment (subtask)"), content[:120])
     db.session.commit()
     notify_task_live(subtask.task_id)
     notify_global_change(kind="task_updated", task_id=subtask.task_id)
@@ -2094,7 +2134,7 @@ def create_subtask_issue(subtask_id):
         creator_name=session["username"],
     )
     db.session.add(issue)
-    log_subtask_activity(subtask.task_id, subtask.id, "Created issue (subtask)", title)
+    log_subtask_activity(subtask.task_id, subtask.id, translate_ui("Created issue (subtask)"), title)
     db.session.commit()
     socketio.emit("global_changed",{"type":"issue_created"})
     notify_task_live(subtask.task_id)
@@ -2156,7 +2196,7 @@ def upload_subtask_file(subtask_id):
         mime_type=uploaded_file.mimetype,
     )
     db.session.add(attachment)
-    log_subtask_activity(subtask.task_id, subtask.id, "Uploaded file (subtask)", safe_name)
+    log_subtask_activity(subtask.task_id, subtask.id, translate_ui("Uploaded file (subtask)"), safe_name)
     db.session.commit()
     notify_task_live(subtask.task_id)
     notify_global_change(kind="task_updated", task_id=subtask.task_id)
@@ -2206,8 +2246,8 @@ def update_subtask(id):
 
         log_activity(
             subtask.task_id,
-            "Updated subtask",
-            f"{subtask.title}: {subtask.status} ({subtask.progress}%)"
+            translate_ui("Updated subtask"),
+            f"{subtask.title}: {translate_ui(subtask.status)} ({subtask.progress}%)"
         )
         db.session.commit()
         notify_task_live(subtask.task_id)
@@ -2239,7 +2279,7 @@ def delete_subtask(id):
     task_id = subtask.task_id
 
     db.session.delete(subtask)
-    log_activity(task_id, "Deleted subtask", subtask.title)
+    log_activity(task_id, translate_ui("Deleted subtask"), subtask.title)
     db.session.commit()
     notify_task_live(task_id)
     notify_global_change(kind="task_updated", task_id=task_id)
@@ -2300,7 +2340,7 @@ def update_task(id):
         task.status = request.form["status"]
         task.progress = int(request.form["progress"])
 
-        log_activity(task.id, "Updated task", f"Status: {task.status}, Progress: {task.progress}%")
+        log_activity(task.id, translate_ui("Updated task"), f"{translate_ui('Status')}: {translate_ui(task.status)}, {translate_ui('Progress')}: {task.progress}%")
         if old_status != "Completed" and task.status == "Completed":
             notify_task_completed(task)
         db.session.commit()
@@ -2336,7 +2376,7 @@ def delete_task(id):
         task.delete_reason = reason
         log_activity(
             task.id,
-            "Delete request submitted",
+            translate_ui("Delete request submitted"),
             f"{current_username} requested task deletion"
         )
 
@@ -2357,8 +2397,8 @@ def delete_task(id):
         task.delete_request_status = "approved"
         log_activity(
             task.id,
-            "Task archived",
-            f"Task deleted by {current_username}"
+            translate_ui("Task archived"),
+            f"{translate_ui('Task')} {translate_ui('deleted')} by {current_username}"
         )
         db.session.commit()
         notify_global_change(
@@ -2390,8 +2430,8 @@ def approve_delete(id):
     task.delete_request_status = "approved"
     log_activity(
         task.id,
-        "Delete approved",
-        f"Task deletion by {session.get('username')}"
+        translate_ui("Delete approved"),
+        f"{translate_ui('Task')} {translate_ui('deleted')} by {session.get('username')}"
     )
     db.session.commit()
 
@@ -2418,8 +2458,8 @@ def reject_delete(id):
     task.delete_request_status = "rejected"
     log_activity(
         task.id,
-        "Delete rejected",
-        f"Delete request rejected by {session.get('username')}"
+        translate_ui("Delete rejected"),
+        f"{translate_ui('Delete request')} {translate_ui('rejected')} by {session.get('username')}"
     )
     db.session.commit()
     notify_task_live(task.id)
@@ -2442,6 +2482,43 @@ def archive_task():
         "archived_tasks.html",
         tasks=tasks
     )
+
+# Xóa task trong lưu trữ
+@app.route("/permanently-delete-task/<int:id>", methods=["POST"])
+def permanently_delete_task(id):
+    if "user_id" not in session:
+        return redirect("/login")
+
+    if session.get("role") != "director":
+        return redirect("/archived-tasks")
+
+    task = Task.query.get(id)
+
+    if not task or not task.is_deleted:
+        return redirect("/archived-tasks")
+
+    # Xóa toàn bộ dữ liệu liên quan
+    Comment.query.filter_by(task_id=task.id).delete()
+    Issue.query.filter_by(task_id=task.id).delete()
+    ActivityLog.query.filter_by(task_id=task.id).delete()
+    TaskAttachment.query.filter_by(task_id=task.id).delete()
+
+    subtasks = SubTask.query.filter_by(task_id=task.id).all()
+    for subtask in subtasks:
+        Comment.query.filter_by(subtask_id=subtask.id).delete()
+        Issue.query.filter_by(subtask_id=subtask.id).delete()
+        ActivityLog.query.filter_by(subtask_id=subtask.id).delete()
+        TaskAttachment.query.filter_by(subtask_id=subtask.id).delete()
+
+        db.session.delete(subtask)
+        
+    db.session.delete(task)
+    db.session.commit()
+    notify_global_change(
+        kind="task_permanently_deleted",
+        task_id=task.id
+    )
+    return redirect("/archived-tasks")
 
 @app.route("/kanban")
 def kanban():
@@ -2498,7 +2575,7 @@ def update_status(id):
     elif task.status == "Completed":
         task.progress = 100
 
-    log_activity(task.id, "Moved task on kanban", f"New status: {task.status}")
+    log_activity(task.id, translate_ui("Moved task on kanban"), f"{translate_ui('New status')}: {translate_ui(task.status)}")
     if old_status != "Completed" and task.status == "Completed":
         notify_task_completed(task)
     db.session.commit()

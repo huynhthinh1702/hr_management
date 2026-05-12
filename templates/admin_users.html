@@ -1,37 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}Admin User Management{% endblock %}
+{% block title %}{{ _('Admin Users') }}{% endblock %}
 
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
     <div>
-        <h1 class="mb-1">Admin User Management</h1>
-        <div class="text-muted">Manage user profile data, roles, account status, and passwords.</div>
+        <h1 class="mb-1" data-i18n="Admin User Management">Admin User Management</h1>
+        <div class="text-muted" data-i18n="Manage user profile data, roles, account status, and passwords.">Manage user profile data, roles, account status, and passwords.</div>
     </div>
 </div>
 
 <form method="GET" class="row g-2 mb-4">
     <div class="col-md-5">
-        <input type="search" name="search" class="form-control" placeholder="Search fullname, username, or email..." value="{{ request.args.get('search', '') }}">
+        <input type="search" name="search" class="form-control" data-i18n-placeholder="Search fullname, username, or email..." placeholder="Search fullname, username, or email..." value="{{ request.args.get('search', '') }}">
     </div>
     <div class="col-md-2">
         <select name="role" class="form-select">
-            <option value="">All roles</option>
+            <option value="" data-i18n="All roles">All roles</option>
             {% for role in ["employee", "manager", "admin", "team_lead", "qa", "director"] %}
-                <option value="{{ role }}" {% if request.args.get('role') == role %}selected{% endif %}>{{ role }}</option>
+                <option value="{{ role }}" {% if request.args.get('role') == role %}selected{% endif %} data-i18n="{{ role }}">{{ role }}</option>
             {% endfor %}
         </select>
     </div>
     <div class="col-md-2">
         <select name="status" class="form-select">
-            <option value="">All status</option>
-            <option value="active" {% if request.args.get('status') == 'active' %}selected{% endif %}>Active</option>
-            <option value="locked" {% if request.args.get('status') == 'locked' %}selected{% endif %}>Locked</option>
+            <option value="" data-i18n="All status">All status</option>
+            <option value="active" {% if request.args.get('status') == 'active' %}selected{% endif %} data-i18n="Active">Active</option>
+            <option value="locked" {% if request.args.get('status') == 'locked' %}selected{% endif %} data-i18n="Locked">Locked</option>
         </select>
     </div>
     <div class="col-md-3 d-flex gap-2">
-        <button class="btn btn-primary flex-fill">Apply</button>
-        <a href="/admin/users" class="btn btn-outline-secondary flex-fill">Reset</a>
+        <button class="btn btn-primary flex-fill" data-i18n="Apply">Apply</button>
+        <a href="/admin/users" class="btn btn-outline-secondary flex-fill" data-i18n="Reset">Reset</a>
     </div>
 </form>
 
@@ -39,12 +39,12 @@
     <table class="table table-hover align-middle mb-0">
         <thead>
             <tr>
-                <th>Fullname</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th data-i18n="Fullname">Fullname</th>
+                <th data-i18n="Username">Username</th>
+                <th data-i18n="Email">Email</th>
+                <th data-i18n="Role">Role</th>
+                <th data-i18n="Status">Status</th>
+                <th data-i18n="Actions">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -56,19 +56,21 @@
                 <td><span class="badge text-bg-light border">{{ user.role }}</span></td>
                 <td>
                     {% if user.is_locked %}
-                        <span class="badge text-bg-danger">Locked</span>
+                        <span class="badge text-bg-danger" data-i18n="Locked">Locked</span>
                     {% else %}
-                        <span class="badge text-bg-success">Active</span>
+                        <span class="badge text-bg-success" data-i18n="Active">Active</span>
                     {% endif %}
                 </td>
                 <td>
                     <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#editUser{{ user.id }}">{{ _('Edit') }}</button>
+                        <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#editUser{{ user.id }}" data-i18n="Edit">Edit</button>
                         <form method="POST" action="/admin/users/{{ user.id }}/toggle-lock">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-outline-warning btn-sm">{{ _('Unlock') if user.is_locked else _('Lock') }}</button>
+                            <button class="btn btn-outline-warning btn-sm" data-i18n="{{ 'Unlock' if user.is_locked else 'Lock' }}">
+                                {{ _('Unlock') if user.is_locked else _('Lock') }}
+                            </button>
                         </form>
-                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#resetUser{{ user.id }}">{{ _('Reset Password') }}</button>
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#resetUser{{ user.id }}" data-i18n="Reset Password">Reset Password</button>
                         <form method="POST" action="/admin/users/{{ user.id }}/delete">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="button" class="btn btn-outline-danger btn-sm" data-confirm="{{ _('Delete this user account?') }}" data-confirm-ok="{{ _('Delete') }}" data-confirm-submit="1" data-i18n="Delete">Delete</button>
@@ -90,7 +92,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-2"><button class="btn btn-success w-100">Save</button></div>
+                        <div class="col-md-2"><button class="btn btn-success w-100" data-i18n="Save">Save</button></div>
                     </form>
                 </td>
             </tr>
@@ -99,18 +101,71 @@
                     <form method="POST" action="/admin/users/{{ user.id }}/reset-password" class="row g-2">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="col-md-9">
-                            <input class="form-control" value="Default password: Hr@12345" disabled>
+                            <input class="form-control" value="Default password: Hr@12345" data-i18n-value="Default password: Hr@12345" disabled>
                         </div>
-                        <div class="col-md-3"><button class="btn btn-secondary w-100">Reset Password</button></div>
+                        <div class="col-md-3"><button class="btn btn-secondary w-100" data-i18n="Reset Password">Reset Password</button></div>
                     </form>
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6" class="text-center text-muted py-4">No users found.</td>
+                <td colspan="6" class="text-center text-muted py-4" data-i18n="No users found">No users found.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+{% if pagination.pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+
+        {% if pagination.has_prev %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('admin_users',
+                    page=pagination.prev_num,
+                    search=request.args.get('search', ''),
+                    role=request.args.get('role', ''),
+                    status=request.args.get('status', '')
+               ) }}">
+               Previous
+            </a>
+        </li>
+        {% endif %}
+
+        {% for p in pagination.iter_pages() %}
+            {% if p %}
+                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                    <a class="page-link"
+                       href="{{ url_for('admin_users',
+                            page=p,
+                            search=request.args.get('search', ''),
+                            role=request.args.get('role', ''),
+                            status=request.args.get('status', '')
+                       ) }}">
+                       {{ p }}
+                    </a>
+                </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('admin_users',
+                    page=pagination.next_num,
+                    search=request.args.get('search', ''),
+                    role=request.args.get('role', ''),
+                    status=request.args.get('status', '')
+               ) }}">
+               Next
+            </a>
+        </li>
+        {% endif %}
+
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}
+
+

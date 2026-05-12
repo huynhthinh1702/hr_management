@@ -155,6 +155,7 @@
       "Manage your account, avatar, and security settings.": "Quản lý tài khoản, ảnh đại diện và bảo mật.",
       "Update avatar": "Cập nhật ảnh đại diện",
       "Save Avatar": "Lưu ảnh đại diện",
+      "Save": "Lưu",
       "Personal Information": "Thông tin cá nhân",
       "Public profile": "Hồ sơ công khai",
       "Bio": "Giới thiệu",
@@ -216,6 +217,55 @@
       "Reset Password": "Đặt lại mật khẩu",
       "Comment content is required.": "Vui lòng nhập nội dung bình luận.",
       "Issue title is required.": "Vui lòng nhập tiêu đề sự cố.",
+      "Permanently Delete": "Xóa vĩnh viễn",
+      "Admin User Management": "Quản lý người dùng",
+      "Manage user profile data, roles, account status, and passwords.": "Quản lý dữ liệu hồ sơ người dùng, vai trò, trạng thái tài khoản và mật khẩu.",
+      "All roles": "Tất cả vai trò",
+      "All status": "Tất cả trạng thái",
+      "Active": "Hoạt động",
+      "Locked": "Đã khóa",
+      "Fullname": "Họ và tên",
+      "No users found": "Không tìm thấy người dùng",
+      "Search fullname, username, or email...": "Tìm họ tên, tên đăng nhập, hoặc email...",
+      "Default password: Hr@12345": "Mật khẩu mặc định: Hr@12345",
+      "Password reset request": "Yêu cầu đặt lại mật khẩu",
+      "requested a reset to the default password.": "đã yêu cầu đặt lại về mật khẩu mặc định.",
+      "Task assigned": "Công việc được giao",
+      "You were assigned to '{task.title}'.": "Bạn đã được giao công việc '{task.title}'.",
+      "Task completed": "Công việc đã hoàn thành",
+      "was marked completed.": "đã được đánh dấu hoàn thành.",
+      "Serious issue created": "Vấn đề nghiêm trọng đã được tạo",
+      "issue on": "Xuất hiện vấn đề",
+      "Task overdue": "Công việc quá hạn",
+      "is past its deadline": "đã quá hạn",
+      "Created task": "Đã tạo công việc",
+      "Updated task": "Đã cập nhật công việc",
+      "Created subtask": "Đã tạo công việc con",
+      "Updated subtask": "Đã cập nhật công việc con",
+      "Delete request submitted": "Đã gửi yêu cầu xóa",
+      "Task archived": "Đã lưu trữ công việc",
+      "Delete approved": "Đã duyệt xóa",
+      "Delete rejected": "Đã từ chối xóa",
+      "Moved task on kanban": "Đã di chuyển công việc",
+      "Added comment": "Đã thêm bình luận",
+      "Created issue": "Đã tạo sự cố",
+      "Resolved issue": "Đã xử lý sự cố",
+      "Uploaded file": "Đã tải tệp lên",
+      "created": "được tạo",
+      "updated": "được cập nhật",
+      "archived": "được lưu trữ",
+      "deleted": "được xóa",
+      "Task": "Công việc",
+      "Subtask": "Công việc con",
+      "Deleted subtask": "Đã xóa công việc con",
+      "requested task deletion": "đã yêu cầu xóa công việc",
+      "Task deleted by": "Công việc bị xóa bởi",
+      "Task deletion approved by": "Yêu cầu xóa được duyệt bởi",
+      "Delete request rejected by": "Yêu cầu xóa bị từ chối bởi",
+      "New status": "Trạng thái mới",
+      "Added comment (subtask)": "Đã thêm bình luận (công việc con)",
+      "Created issue (subtask)": "Đã tạo sự cố (công việc con)",
+      "Uploaded file (subtask)": "Đã tải tệp lên (công việc con)",
     },
   };
 
@@ -347,7 +397,7 @@
       '<div class="d-flex">' +
       '<div class="toast-body">' +
       '<div class="fw-semibold mb-1">' +
-      title +
+      tr(title) +
       "</div>" +
       "<div>" +
       (message == null ? "" : String(message)) +
@@ -373,6 +423,15 @@
     scope.querySelectorAll("[data-i18n]").forEach((el) => {
       const key = el.getAttribute("data-i18n");
       if (key && I18N[lang]?.[key]) el.textContent = I18N[lang][key];
+    });
+    scope.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      const key = el.getAttribute("data-i18n-placeholder");
+      if (key && I18N[lang]?.[key]) {el.setAttribute("placeholder", I18N[lang][key]);
+    }
+    });
+    scope.querySelectorAll("[data-i18n-value]").forEach((el) => {
+      const key = el.getAttribute("data-i18n-value");
+      if (key && I18N[lang]?.[key]) {el.value = I18N[lang][key];}
     });
     scope.querySelectorAll("input[placeholder], textarea[placeholder]").forEach((el) => {
       const key = el.getAttribute("placeholder");
@@ -445,10 +504,10 @@
         data.items.map((item) => (
           '<a href="' + escapeHtml(item.url || "#") + '" class="dropdown-item notification-item ' + (!item.is_read ? "is-unread" : "") + '">' +
           '<div class="d-flex justify-content-between gap-2">' +
-          '<div class="fw-semibold text-wrap">' + escapeHtml(item.title) + '</div>' +
+          '<div class="fw-semibold text-wrap">' + escapeHtml(tr(item.title)) + '</div>' +
           '<small class="text-muted text-nowrap">' + escapeHtml(item.created_at || "") + '</small>' +
           '</div>' +
-          '<div class="small text-muted text-wrap">' + escapeHtml(item.message) + '</div>' +
+          '<div class="small text-muted text-wrap">' + escapeHtml(tr(item.message)) + '</div>' +
           '</a>'
         )).join("") +
         '</div>'

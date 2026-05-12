@@ -17,7 +17,7 @@
                     <th data-i18n="Title">Title</th>
                     <th data-i18n="Deleted By">Deleted By</th>
                     <th data-i18n="Deleted At">Deleted At</th>
-                    <th data-i18n="Reason">Reason</th>
+                    <th data-i18n="Actions">Actions</th>
                 </tr>
             </thead>
 
@@ -29,7 +29,14 @@
                     <td>{{ task.title }}</td>
                     <td>{{ task.deleted_by }}</td>
                     <td>{{ task.deleted_at | vn_time }}</td>
-                    <td>{{ task.delete_reason }}</td>
+                    <td>
+                    {% if session.role == 'director' %}
+                        <form action="/permanently-delete-task/{{ task.id}}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger btn-sm" data-i18n="Permanently Delete">Permanently Delete</button>
+                        </form>
+                    {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
 

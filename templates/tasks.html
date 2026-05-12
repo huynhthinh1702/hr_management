@@ -14,7 +14,7 @@
         Task List
     </h1>
 
-    {% if session.get("role") in ["manager", "director", "team_lead", "admin"] %}
+    {% if session.get("role") in ["manager", "director", "team_lead"] %}
 
     <a
         href="/create-task"
