@@ -101,7 +101,8 @@
     if (statusSelect && statusSelect.value !== s.status) statusSelect.value = s.status;
 
     var assigned = qs("#live-subtask-assigned");
-    if (assigned) assigned.textContent = s.assigned_name ? tr("Assigned") + ": " + s.assigned_name : "";
+    var names = s.assigned_name && Array.isArray(s.assigned_name) ? s.assigned_name.join(", ") : (s.assigned_name || "");
+    if (assigned) assigned.textContent = names ? tr("Assigned") + ": " + names : "";
   }
 
   function renderComments(comments) {

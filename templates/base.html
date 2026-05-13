@@ -9,6 +9,14 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="/static/css/app.css" rel="stylesheet">
     {% block head_extra %}{% endblock %}
+    <!-- Restore sidebar collapsed state BEFORE first paint -->
+    <script>
+      try {
+        if (localStorage.getItem("hr.sidebar.collapsed") === "1") {
+          document.documentElement.classList.add("sidebar-collapsed");
+        }
+      } catch(e) {}
+    </script>
 </head>
 <body>
 <nav class="navbar app-navbar sticky-top">
@@ -50,14 +58,14 @@
                     <div class="dropdown-menu dropdown-menu-end notification-menu shadow border-0" id="notificationMenu">
                         <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
                             <div class="fw-semibold" data-i18n="Notifications">{{ _("Notifications") }}</div>
-                            {% if notification_summary.unread_count %}
-                                <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-notifications-read data-i18n="Mark read">{{ _("Mark read") }}</button>
+                            {% if notification_summary["items"] %}
+                                <button class="btn btn-link btn-sm p-0 text-decoration-none text-danger" type="button" data-notifications-delete-all data-i18n="Delete all">{{ _("Delete all") }}</button>
                             {% endif %}
                         </div>
                         {% if notification_summary["items"] %}
                             <div class="notification-list" id="notificationList">
                                 {% for item in notification_summary["items"] %}
-                                    <a href="{{ item.url or '#' }}" class="dropdown-item notification-item {% if not item.is_read %}is-unread{% endif %}">
+                                    <a href="{{ item.url or '#' }}" class="dropdown-item notification-item {% if not item.is_read %}is-unread{% endif %}" data-notification-id="{{ item.id }}">
                                         <div class="d-flex justify-content-between gap-2">
                                             <div class="fw-semibold text-wrap">{{ item.title }}</div>
                                             <small class="text-muted text-nowrap">{{ item.created_at | vn_time }}</small>

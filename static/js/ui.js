@@ -32,6 +32,7 @@
       "Notification": "Thông báo",
       "No notifications.": "Không có thông báo.",
       "Mark read": "Đánh dấu đã đọc",
+      "Delete all": "Xóa tất cả",
       "Email": "Email",
       "Password": "Mật khẩu",
       "Forgot password?": "Quên mật khẩu?",
@@ -486,23 +487,23 @@
     }
 
     const header = menu.querySelector(".border-bottom");
-    let readBtn = qs("[data-notifications-read]", menu);
-    if (data.unread_count > 0 && !readBtn && header) {
-      readBtn = document.createElement("button");
-      readBtn.className = "btn btn-link btn-sm p-0 text-decoration-none";
-      readBtn.type = "button";
-      readBtn.setAttribute("data-notifications-read", "");
-      readBtn.setAttribute("data-i18n", "Mark read");
-      readBtn.textContent = tr("Mark read");
-      header.appendChild(readBtn);
-    } else if (data.unread_count === 0 && readBtn) {
-      readBtn.remove();
+    let deleteAllBtn = qs("[data-notifications-delete-all]", menu);
+    if (data.items && data.items.length > 0 && !deleteAllBtn && header) {
+      deleteAllBtn = document.createElement("button");
+      deleteAllBtn.className = "btn btn-link btn-sm p-0 text-decoration-none text-danger";
+      deleteAllBtn.type = "button";
+      deleteAllBtn.setAttribute("data-notifications-delete-all", "");
+      deleteAllBtn.setAttribute("data-i18n", "Delete all");
+      deleteAllBtn.textContent = tr("Delete all");
+      header.appendChild(deleteAllBtn);
+    } else if ((!data.items || data.items.length === 0) && deleteAllBtn) {
+      deleteAllBtn.remove();
     }
 
     const body = data.items && data.items.length
       ? '<div class="notification-list" id="notificationList">' +
         data.items.map((item) => (
-          '<a href="' + escapeHtml(item.url || "#") + '" class="dropdown-item notification-item ' + (!item.is_read ? "is-unread" : "") + '">' +
+          '<a href="' + escapeHtml(item.url || "#") + '" class="dropdown-item notification-item ' + (!item.is_read ? "is-unread" : "") + '" data-notification-id="' + item.id + '">' +
           '<div class="d-flex justify-content-between gap-2">' +
           '<div class="fw-semibold text-wrap">' + escapeHtml(tr(item.title)) + '</div>' +
           '<small class="text-muted text-nowrap">' + escapeHtml(item.created_at || "") + '</small>' +
@@ -535,10 +536,11 @@
       .catch(() => {});
   }
 
+  // Delete all notifications
   document.addEventListener("click", (e) => {
-    const readNotifications = e.target.closest("[data-notifications-read]");
-    if (readNotifications) {
-      fetch("/api/notifications/read", {
+    const deleteAllBtn = e.target.closest("[data-notifications-delete-all]");
+    if (deleteAllBtn) {
+      fetch("/api/notifications/delete-all", {
         method: "POST",
         credentials: "same-origin",
         headers: {
@@ -549,13 +551,61 @@
       }).then((r) => {
         if (!r.ok) return;
         qs("#notificationBadge")?.remove();
-        document.querySelectorAll(".notification-item.is-unread").forEach((el) => {
-          el.classList.remove("is-unread");
-        });
-        readNotifications.remove();
+        deleteAllBtn.remove();
         refreshNotifications();
       });
     }
+  });
+
+  // Click on notification item → mark as read first, then navigate
+  document.addEventListener("click", (e) => {
+    const item = e.target.closest(".notification-item");
+    if (!item) return;
+    
+    const notifId = item.getAttribute("data-notification-id");
+    const href = item.getAttribute("href");
+    const isUnread = item.classList.contains("is-unread");
+    
+    // If it has a real URL, prevent default so we can navigate AFTER marking as read
+    if (href && href !== "#" && isUnread) {
+      e.preventDefault();
+      fetch("/api/notifications/" + notifId + "/read", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": window.HR_CSRF || "",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      }).then((r) => {
+        if (r.ok) {
+          item.classList.remove("is-unread");
+          refreshNotifications();
+        }
+      }).catch(() => {})
+      .finally(() => {
+        // Navigate AFTER marking as read
+        window.location.href = href;
+      });
+    } else if (isUnread) {
+      // No real URL, just mark as read
+      e.preventDefault();
+      fetch("/api/notifications/" + notifId + "/read", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": window.HR_CSRF || "",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      }).then((r) => {
+        if (r.ok) {
+          item.classList.remove("is-unread");
+          refreshNotifications();
+        }
+      }).catch(() => {});
+    }
+    // If already read, let navigation happen naturally
   });
 
   if (window.HR_LIVE) {
@@ -611,5 +661,21 @@
       });
     }
     updateSummary();
+  });
+
+  // Admin users role dropdown: radio change → update button text
+  document.querySelectorAll("[data-role-option]").forEach((option) => {
+    option.addEventListener("click", function (e) {
+      const userId = this.getAttribute("data-role-option");
+      const value = this.getAttribute("data-role-value");
+      const radio = this.querySelector('input[type="radio"]');
+      if (radio) radio.checked = true;
+      const summarySpan = document.querySelector(`[data-role-summary="${userId}"]`);
+      if (summarySpan) summarySpan.textContent = value;
+      // Highlight active option
+      document.querySelectorAll(`[data-role-option="${userId}"]`).forEach((opt) => {
+        opt.classList.toggle("is-active", opt === this);
+      });
+    });
   });
 })();

@@ -346,14 +346,14 @@
 
         <td class="col-sm-hide">
 
-            {% if subtask.assigned_user %}
-
+            {% set assigned_names = [] %}
+            {% for u in subtask.assigned_users %}
+                {% set _ = assigned_names.append(u.full_name or u.username) %}
+            {% endfor %}
+            {% if assigned_names %}
             <span class="badge text-bg-light border">
-
-                {{ subtask.assigned_user.full_name or subtask.assigned_user.username }}
-
+                {{ assigned_names | join(', ') }}
             </span>
-
             {% endif %}
 
         </td>

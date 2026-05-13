@@ -2,16 +2,30 @@
 (function () {
   const SIDEBAR_ID = "appSidebar";
   const COLLAPSED_KEY = "hr.sidebar.collapsed";
+  let isTransitioning = false;
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
   }
 
   function applyCollapsed(isCollapsed) {
-    document.documentElement.classList.toggle("sidebar-collapsed", Boolean(isCollapsed));
+    if (isTransitioning) return;
+    isTransitioning = true;
+
+    const html = document.documentElement;
+    // Add transition lock class to prevent reflow jank
+    html.classList.add("sidebar-transitioning");
+    html.classList.toggle("sidebar-collapsed", Boolean(isCollapsed));
+    
     try {
       localStorage.setItem(COLLAPSED_KEY, isCollapsed ? "1" : "0");
     } catch (_) {}
+
+    // Remove lock after transition completes
+    setTimeout(() => {
+      html.classList.remove("sidebar-transitioning");
+      isTransitioning = false;
+    }, 350);
   }
 
   function getCollapsed() {
@@ -22,10 +36,13 @@
     }
   }
 
-  // Restore state (desktop only)
-  if (window.matchMedia && window.matchMedia("(min-width: 992px)").matches) {
-    applyCollapsed(getCollapsed());
-  }
+  // On first load, enable transitions after a short delay to prevent flash animation
+  setTimeout(() => {
+    document.documentElement.classList.add("sidebar-ready");
+  }, 50);
+
+  // The collapsed class is already applied inline in base.html <head>,
+  // so we don't need to do it again here.
 
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-sidebar-toggle]");

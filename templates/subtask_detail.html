@@ -14,8 +14,12 @@
             {% if parent_task %}
                 <span class="text-muted">Parent: <a href="/task/{{ parent_task.id }}">{{ parent_task.title }}</a></span>
             {% endif %}
-            {% if subtask.assigned_user %}
-                <span class="text-muted" id="live-subtask-assigned">Assigned: {{ subtask.assigned_user.full_name or subtask.assigned_user.username }}</span>
+            {% set assigned_names = [] %}
+            {% for u in subtask.assigned_users %}
+                {% set _ = assigned_names.append(u.full_name or u.username) %}
+            {% endfor %}
+            {% if assigned_names %}
+                <span class="text-muted" id="live-subtask-assigned">Assigned: {{ assigned_names | join(', ') }}</span>
             {% else %}
                 <span class="text-muted" id="live-subtask-assigned"></span>
             {% endif %}

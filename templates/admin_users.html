@@ -80,20 +80,45 @@
             </tr>
             <tr class="collapse" id="editUser{{ user.id }}">
                 <td colspan="6">
-                    <form method="POST" action="/admin/users/{{ user.id }}/edit" class="row g-2">
+                    <div class="p-3 bg-light rounded-3">
+                    <form method="POST" action="/admin/users/{{ user.id }}/edit" class="row g-3 align-items-end">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="col-md-3"><input name="full_name" class="form-control" value="{{ user.full_name or '' }}" placeholder="Fullname"></div>
-                        <div class="col-md-2"><input name="username" class="form-control" value="{{ user.username }}" placeholder="Username" required></div>
-                        <div class="col-md-3"><input type="email" name="email" class="form-control" value="{{ user.email }}" placeholder="Email" required></div>
-                        <div class="col-md-2">
-                            <select name="role" class="form-select">
-                                {% for role in ["employee", "manager", "admin", "team_lead", "qa", "director"] %}
-                                    <option value="{{ role }}" {% if user.role == role %}selected{% endif %}>{{ role }}</option>
-                                {% endfor %}
-                            </select>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold text-muted mb-1" data-i18n="Fullname">Fullname</label>
+                            <input name="full_name" class="form-control form-control-sm" value="{{ user.full_name or '' }}" placeholder="Fullname">
                         </div>
-                        <div class="col-md-2"><button class="btn btn-success w-100" data-i18n="Save">Save</button></div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted mb-1" data-i18n="Username">Username</label>
+                            <input name="username" class="form-control form-control-sm" value="{{ user.username }}" placeholder="Username" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold text-muted mb-1" data-i18n="Email">Email</label>
+                            <input type="email" name="email" class="form-control form-control-sm" value="{{ user.email }}" placeholder="Email" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted mb-1" data-i18n="Role">Role</label>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary btn-sm w-100 d-flex justify-content-between align-items-center assign-picker-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                                    <span data-role-summary="{{ user.id }}">{{ user.role }}</span>
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                                <div class="dropdown-menu assign-picker-menu p-2 w-100">
+                                    <div class="assign-picker-options">
+                                        {% for role in ["employee", "manager", "admin", "team_lead", "qa", "director"] %}
+                                            <label class="dropdown-item d-flex align-items-center gap-2 rounded {% if user.role == role %}is-active{% endif %}" style="cursor:pointer;" data-role-option="{{ user.id }}" data-role-value="{{ role }}">
+                                                <input class="form-check-input m-0" type="radio" name="role" value="{{ role }}" {% if user.role == role %}checked{% endif %}>
+                                                <span>{{ role }}</span>
+                                            </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success btn-sm w-100" data-i18n="Save">Save</button>
+                        </div>
                     </form>
+                    </div>
                 </td>
             </tr>
             <tr class="collapse" id="resetUser{{ user.id }}">

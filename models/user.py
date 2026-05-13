@@ -8,7 +8,7 @@ class User(db.Model):
 
     email = db.Column(db.String(100), unique=True)
 
-    password = db.Column(db.String(100))
+    password = db.Column(db.Text)
 
     role = db.Column(db.String(50))
 

@@ -1,5 +1,22 @@
 from database import db
 
+subtask_users = db.Table(
+    "subtask_users",
+
+    db.Column(
+        "subtask_id",
+        db.Integer,
+        db.ForeignKey("sub_task.id")
+    ),
+
+    db.Column(
+        "user_id",
+        db.Integer,
+        db.ForeignKey("user.id")
+    )
+)
+
+
 class SubTask(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
@@ -18,11 +35,13 @@ class SubTask(db.Model):
         nullable=True,
     )
 
-    assigned_to = db.Column(
-        db.Integer,
-        db.ForeignKey("user.id"),
-        nullable=True
+    creator = db.relationship(
+        "User",
+        foreign_keys=[created_by]
     )
 
-    assigned_user = db.relationship("User", foreign_keys=[assigned_to])
-    creator = db.relationship("User", foreign_keys=[created_by])
+    assigned_users = db.relationship(
+        "User",
+        secondary=subtask_users,
+        backref="assigned_subtasks"
+    )

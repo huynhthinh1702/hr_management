@@ -84,9 +84,10 @@
 
                             <input
                                 class="form-check-input m-0"
-                                type="radio"
+                                type="checkbox"
                                 name="assigned_to"
                                 value="{{ user.id }}"
+                                data-user-label="{{ user.full_name or user.username }}"
                             >
 
                             <span>

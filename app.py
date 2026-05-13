@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from flask_wtf.csrf import CSRFProtect
+from flask_migrate import Migrate
 from sqlalchemy import func, inspect, or_, text
 from sqlalchemy.orm import selectinload
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -33,7 +34,7 @@ from models.user import User
 app = Flask(__name__)
 app.secret_key = "secret123"
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:123@localhost/hr_management'
 app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
@@ -47,6 +48,8 @@ os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], "attachments"), exist_ok=T
 os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], "avatars"), exist_ok=True)
 
 db.init_app(app)
+
+migrate = Migrate(app, db)
 
 csrf = CSRFProtect(app)
 
@@ -62,6 +65,7 @@ UI_TRANSLATIONS = {
         "Notifications": "Notifications",
         "No notifications.": "No notifications.",
         "Mark read": "Mark read",
+        "Delete all": "Delete all",
         "Sidebar": "Sidebar",
         "Logout": "Logout",
         "Login": "Login",
@@ -155,6 +159,7 @@ UI_TRANSLATIONS = {
         "Notifications": "Thông báo",
         "No notifications.": "Không có thông báo.",
         "Mark read": "Đánh dấu đã đọc",
+        "Delete all": "Xóa tất cả",
         "Sidebar": "Thanh sidebar",
         "Logout": "Đăng xuất",
         "Login": "Đăng nhập",
@@ -397,8 +402,8 @@ def serialize_task_live(task_id, sections=None, activity_page=1):
                 "title": s.title,
                 "status": s.status,
                 "progress": s.progress,
-                "assigned_to": s.assigned_to,
-                "assigned_name": (s.assigned_user.full_name or s.assigned_user.username) if s.assigned_user else "Unassigned",
+                "assigned_users": [{"id": u.id,"username": u.username,"full_name": u.full_name,}for u in s.assigned_users],
+                "assigned_names": [u.full_name or u.username for u in s.assigned_users],
             }
             for s in subtasks
         ]
@@ -456,15 +461,14 @@ def serialize_subtask_live(subtask_id, sections=None, activity_page=1):
     payload = {"task_id": subtask.task_id, "subtask_id": subtask.id}
 
     if "subtask" in selected:
-        assigned = subtask.assigned_user
         payload["subtask"] = {
             "id": subtask.id,
             "task_id": subtask.task_id,
             "title": subtask.title,
             "status": subtask.status,
             "progress": subtask.progress,
-            "assigned_to": subtask.assigned_to,
-            "assigned_name": (assigned.full_name or assigned.username) if assigned else None,
+            "assigned_users": [{"id": u.id,"username": u.username,"full_name": u.full_name,}for u in subtask.assigned_users],
+            "assigned_name": [u.full_name or u.username for u in subtask.assigned_users],
         }
 
     if "comments" in selected:
@@ -688,94 +692,13 @@ def serialize_notification(notification):
         "created_at": fmt_vn(notification.created_at),
     }
 
+def create_default_admin():
 
-def ensure_schema():
-    db.create_all()
-
-    inspector = inspect(db.engine)
-    tables = inspector.get_table_names()
-
-    def column_names(table_name):
-        if table_name not in tables:
-            return set()
-        return {column["name"] for column in inspector.get_columns(table_name)}
-
-    user_columns = column_names("user")
-
-    subtask_columns = column_names("sub_task")
-    comment_columns = column_names("comment")
-    issue_columns = column_names("issue")
-    attachment_columns = column_names("task_attachment")
-    activity_columns = column_names("activity_log")
-
-    if "assigned_to" not in subtask_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE sub_task ADD COLUMN assigned_to INTEGER"
-            )
-        )
-
-    if "created_by" not in subtask_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE sub_task ADD COLUMN created_by INTEGER"
-            )
-        )
-
-    if "subtask_id" not in comment_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE comment ADD COLUMN subtask_id INTEGER"
-            )
-        )
-
-    if "subtask_id" not in issue_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE issue ADD COLUMN subtask_id INTEGER"
-            )
-        )
-
-    if "subtask_id" not in attachment_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE task_attachment ADD COLUMN subtask_id INTEGER"
-            )
-        )
-
-    if "subtask_id" not in activity_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE activity_log ADD COLUMN subtask_id INTEGER"
-            )
-        )
-
-    if "is_locked" not in user_columns:
-        db.session.execute(
-            text('ALTER TABLE "user" ADD COLUMN is_locked BOOLEAN DEFAULT 0')
-        )
-
-    if "has_seen_guide" not in user_columns:
-        db.session.execute(
-            text('ALTER TABLE "user" ADD COLUMN has_seen_guide BOOLEAN DEFAULT 0')
-        )
-
-    if "severity" not in issue_columns:
-        db.session.execute(
-            text(
-                "ALTER TABLE issue ADD COLUMN severity VARCHAR(30) DEFAULT 'Normal' NOT NULL"
-            )
-        )
-
-    # =========================
-    # CREATE DEFAULT ADMIN
-    # =========================
-
-    admin_exists = User.query.filter_by(
-        username="admin"
+    admin = User.query.filter_by(
+        email="admin@gmail.com"
     ).first()
 
-    if not admin_exists:
+    if not admin:
 
         admin = User(
             username="admin",
@@ -786,8 +709,9 @@ def ensure_schema():
         )
 
         db.session.add(admin)
+        db.session.commit()
 
-    db.session.commit()
+        print("Default admin created")
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -854,15 +778,28 @@ def vn_time_filter(dt, fmt="%Y-%m-%d %H:%M"):
 
 
 def scoped_task_query():
-    base_query = Task.query.filter_by(is_deleted=False)
 
-    if session.get("role") in ["manager", "admin", "director", "team_lead", "qa"]:
-        return base_query
-    current_user = User.query.get(session["user_id"])
-    return base_query.join(task_users).filter(
-        task_users.c.user_id == current_user.id
+    base_query = Task.query.filter_by(
+        is_deleted=False
     )
 
+    current_user_id = session.get("user_id")
+    current_role = session.get("role")
+
+    # admin/director thấy toàn bộ
+    if current_role in ["admin", "director"]:
+        return base_query
+
+    # các role khác:
+    # chỉ thấy task được assign
+    # hoặc task do chính họ tạo
+
+    return base_query.filter(
+        or_(
+            Task.created_by == current_user_id,
+            Task.assigned_users.any(User.id == current_user_id)
+        )
+    )
 
 def task_accessible_for_session(task_id):
     if "user_id" not in session:
@@ -880,7 +817,7 @@ def subtask_accessible_for_session(subtask_id):
     if task_accessible_for_session(subtask.task_id):
         return True
     # Assigned user can always access their subtask.
-    if subtask.assigned_to and int(subtask.assigned_to) == int(session.get("user_id")):
+    if subtask.assigned_users and any(u.id == int(session.get("user_id")) for u in subtask.assigned_users):
         return True
     # Subtask creator can always access it.
     if subtask.created_by and int(subtask.created_by) == int(session.get("user_id")):
@@ -972,7 +909,7 @@ def api_dashboard_summary():
     # SUBTASKS (only active ones, parent task not deleted)
 
     subtasks = SubTask.query.filter(
-        SubTask.assigned_to == current_user_id
+        SubTask.assigned_users.any(User.id == current_user_id)
     ).all()
     subtasks = [s for s in subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
 
@@ -1061,8 +998,8 @@ def api_dashboard_analytics():
 
     # Also count subtask assignee productivity
     for s in active_subtasks:
-        if s.assigned_user:
-            label = display_user_name(s.assigned_user)
+        for u in (s.assigned_users or []):
+            label = display_user_name(u)
             prod.setdefault(label, {"username": label, "completed": 0, "total": 0})
             prod[label]["total"] += 1
             if s.status == "Completed":
@@ -1228,9 +1165,13 @@ def api_tasks_table():
 
     # Also fetch subtasks assigned to current user (matching server-side /tasks behavior)
     # IMPORTANT: exclude subtasks whose parent task is deleted (archived)
-    assigned_subtasks = SubTask.query.filter_by(
-        assigned_to=session.get("user_id")
-    ).options(selectinload(SubTask.assigned_user)).all()
+    current_user_id = session.get("user_id")
+    assigned_subtasks = SubTask.query.filter(
+        or_(
+            SubTask.assigned_users.any(User.id == current_user_id),
+            SubTask.created_by == current_user_id
+        )
+    ).all()
     active_subtask_ids = []
     for s in assigned_subtasks:
         pt = Task.query.get(s.task_id)
@@ -1241,6 +1182,8 @@ def api_tasks_table():
     subtask_rows = []
     for s in assigned_subtasks:
         parent_task = Task.query.get(s.task_id)
+        assigned_users_list = s.assigned_users or []
+        first_assigned = assigned_users_list[0] if assigned_users_list else None
         subtask_rows.append({
             "id": s.id,
             "title": s.title,
@@ -1252,10 +1195,10 @@ def api_tasks_table():
             "delete_request_status": None,
             "can_update": True,
             "can_delete": False,
-            "assigned_users": [{"username": s.assigned_user.username if s.assigned_user else "", "full_name": (s.assigned_user.full_name or s.assigned_user.username) if s.assigned_user else ""}],
+            "assigned_users": [{"username": u.username, "full_name": display_user_name(u)} for u in assigned_users_list],
             "is_subtask": True,
             "subtask_id": s.id,
-            "subtask_assigned_name": (s.assigned_user.full_name or s.assigned_user.username) if s.assigned_user else "Unassigned",
+            "subtask_assigned_name": display_user_name(first_assigned) if first_assigned else "Unassigned",
         })
 
     return jsonify({
@@ -1413,7 +1356,10 @@ def dashboard():
     # SUBTASKS (only active ones, parent task not deleted)
 
     subtasks = SubTask.query.filter(
-        SubTask.assigned_to == current_user_id
+        db.or_(
+            SubTask.assigned_users.any(User.id == current_user_id),
+            SubTask.created_by == current_user_id
+        )
     ).all()
     subtasks = [s for s in subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
 
@@ -1624,7 +1570,8 @@ def create_task():
             status="Pending",
             progress=0,
             deadline=deadline,
-            priority=priority
+            priority=priority,
+            created_by=session["user_id"]
         )
 
         users = User.query.filter(
@@ -1654,6 +1601,10 @@ def create_task():
         if ROLE_HIERARCHY.get(current_role, 0) 
         > ROLE_HIERARCHY.get(user.role, 0)
     ]
+
+    # Sort by role priority (higher role first), then alphabetically by name
+    ROLE_ORDER = {"director": 0, "manager": 1, "team_lead": 2, "qa": 3, "employee": 4, "admin": 5}
+    users.sort(key=lambda u: (ROLE_ORDER.get(u.role, 99), (u.full_name or u.username).lower()))
 
     return render_template("create_task.html", users=users)
 
@@ -1998,12 +1949,17 @@ def create_subtask(task_id):
         > ROLE_HIERARCHY.get(user.role, 0)
     ]
 
+    # Sort by role priority, then alphabetically by name
+    ROLE_ORDER = {"director": 0, "manager": 1, "team_lead": 2, "qa": 3, "employee": 4, "admin": 5}
+    users.sort(key=lambda u: (ROLE_ORDER.get(u.role, 99), (u.full_name or u.username).lower()))
+
     if request.method == "POST":
         title = request.form["title"]
-        assigned_to = request.form.get("assigned_to")
-        assigned_user = User.query.get(int(assigned_to)) if assigned_to else None
-        if assigned_user and ROLE_HIERARCHY.get(current_role, 0) <= ROLE_HIERARCHY.get(assigned_user.role, 0):
-            return "Access Denied"
+        assigned_user_ids = request.form.getlist("assigned_to")
+        assigned_users = User.query.filter(User.id.in_(assigned_user_ids)).all()
+        for user in assigned_users:
+            if ROLE_HIERARCHY.get(current_role, 0) <= ROLE_HIERARCHY.get(user.role, 0):
+                return "Access Denied"
 
         new_subtask = SubTask(
             title=title,
@@ -2011,8 +1967,8 @@ def create_subtask(task_id):
             progress=0,
             task_id=task_id,
             created_by=session.get("user_id"),
-            assigned_to=assigned_user.id if assigned_user else None,
         )
+        new_subtask.assigned_users = assigned_users
         db.session.add(new_subtask)
         log_activity(task_id, translate_ui("Created subtask"), title)
         db.session.commit()
@@ -2296,8 +2252,13 @@ def tasks():
     status = request.args.get("status", "")
 
     query = scoped_task_query()
-    assigned_subtasks = SubTask.query.filter_by(
-        assigned_to=session.get("user_id")
+
+    current_user_id = session.get("user_id")
+    assigned_subtasks = SubTask.query.filter(
+        or_(
+            SubTask.assigned_users.any(User.id == current_user_id),
+            SubTask.created_by == current_user_id
+        )
     ).all()
     # Filter out subtasks whose parent task is deleted (archived)
     assigned_subtasks = [s for s in assigned_subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
@@ -2412,9 +2373,6 @@ def delete_task(id):
 def approve_delete(id):
     if "user_id" not in session:
         return redirect("/login")
-
-    if session.get("role") not in ["manager", "admin"]:
-        return redirect("/tasks")
 
     task = Task.query.get(id)
 
@@ -2599,6 +2557,27 @@ def api_notifications_read():
     return jsonify({"message": "marked_read"})
 
 
+@app.route("/api/notifications/delete-all", methods=["POST"])
+def api_notifications_delete_all():
+    if "user_id" not in session:
+        return jsonify({"error": "unauthorized"}), 401
+    Notification.query.filter_by(user_id=session["user_id"]).delete()
+    db.session.commit()
+    return jsonify({"message": "deleted_all"})
+
+
+@app.route("/api/notifications/<int:id>/read", methods=["POST"])
+def api_notification_read_one(id):
+    if "user_id" not in session:
+        return jsonify({"error": "unauthorized"}), 401
+    notification = Notification.query.get(id)
+    if not notification or notification.user_id != session["user_id"]:
+        return jsonify({"error": "not found"}), 404
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({"message": "marked_read"})
+
+
 @app.route("/user-guide/seen", methods=["POST"])
 def user_guide_seen():
     user = get_current_user()
@@ -2610,7 +2589,9 @@ def user_guide_seen():
 
 
 with app.app_context():
-    ensure_schema()
+    db.create_all()
+    create_default_admin()
+    
 
 if __name__ == "__main__":
     socketio.run(app, debug=True, allow_unsafe_werkzeug=True)

@@ -34,6 +34,20 @@ class Task(db.Model):
     priority = db.Column(db.String(20))
 
     # =========================
+    # CREATE SYSTEM
+    # =========================
+
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("user.id"),
+        nullable=True
+    )
+
+    creator = db.relationship(
+        "User",
+        foreign_keys=[created_by]
+    )
+    # =========================
     # DELETE SYSTEM
     # =========================
 

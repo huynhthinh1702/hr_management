@@ -126,7 +126,7 @@
 
     subtasks.forEach(function (s) {
       var row = document.createElement("tr");
-      var assignedName = s.assigned_name || "";
+      var assignedName = (s.assigned_names && s.assigned_names.join(", ")) || "";
       row.innerHTML =
         "<td>" +
         s.id +
