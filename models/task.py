@@ -7,17 +7,27 @@ task_users = db.Table(
     db.Column(
         "task_id",
         db.Integer,
-        db.ForeignKey("task.id")
+        db.ForeignKey("task.id"),
+        nullable=False,
     ),
 
     db.Column(
         "user_id",
         db.Integer,
-        db.ForeignKey("user.id")
-    )
+        db.ForeignKey("user.id"),
+        nullable=False,
+    ),
+    db.Index("ix_task_users_user_task", "user_id", "task_id"),
+    db.Index("ix_task_users_task_user", "task_id", "user_id"),
 )
 
 class Task(db.Model):
+    __table_args__ = (
+        db.Index("ix_task_active_status", "is_deleted", "status"),
+        db.Index("ix_task_created_by_status", "created_by", "status"),
+        db.Index("ix_task_deadline_status", "deadline", "status"),
+        db.Index("ix_task_created_at", "created_at"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -32,6 +42,8 @@ class Task(db.Model):
     deadline = db.Column(db.String(50))
 
     priority = db.Column(db.String(20))
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     # =========================
     # CREATE SYSTEM

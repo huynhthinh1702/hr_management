@@ -4,6 +4,11 @@ from database import db
 
 
 class TaskAttachment(db.Model):
+    __table_args__ = (
+        db.Index("ix_attachment_task_subtask_created", "task_id", "subtask_id", "created_at"),
+        db.Index("ix_attachment_uploaded_by_created", "uploaded_by", "created_at"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     original_filename = db.Column(db.String(255), nullable=False)
     stored_filename = db.Column(db.String(255), nullable=False)

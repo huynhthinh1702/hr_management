@@ -4,6 +4,11 @@ from database import db
 
 
 class Notification(db.Model):
+    __table_args__ = (
+        db.Index("ix_notification_user_read_created", "user_id", "is_read", "created_at"),
+        db.Index("ix_notification_user_type_task", "user_id", "type", "task_id"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, nullable=False, index=True)
     actor_id = db.Column(db.Integer, nullable=True)

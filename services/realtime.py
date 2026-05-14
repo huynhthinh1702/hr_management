@@ -1,13 +1,28 @@
+import os
+
 from flask_socketio import SocketIO, join_room, leave_room
+
+from services.notification_service import user_notification_room
 
 
 def init_socketio(app):
-    return SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+    redis_url = os.getenv("REDIS_URL")
+    async_mode = os.getenv("SOCKETIO_ASYNC_MODE", "threading")
+    return SocketIO(
+        app,
+        async_mode=async_mode,
+        cors_allowed_origins=os.getenv("SOCKETIO_CORS_ORIGINS", "*"),
+        message_queue=redis_url,
+        manage_session=False,
+        ping_interval=25,
+        ping_timeout=20,
+    )
 
 
 def join_global_if_authenticated(session):
     if "user_id" in session:
         join_room("global")
+        join_room(user_notification_room(session["user_id"]))
 
 
 def emit_global(socketio, kind="data_changed", task_id=None):

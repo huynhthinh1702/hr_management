@@ -15,6 +15,9 @@
     overduePill: document.getElementById("live-overdue-pill"),
     heatmapWrap: document.getElementById("heatmapWrap"),
   };
+  let refreshTimer = null;
+  let isSummaryLoading = false;
+  let isAnalyticsLoading = false;
 
   function escapeHtml(text) {
     const div = document.createElement("div");
@@ -182,15 +185,22 @@
   }
 
   function refreshSummary() {
+    if (isSummaryLoading) return;
+    isSummaryLoading = true;
     fetch("/api/dashboard/summary", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) renderDashboard(data);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        isSummaryLoading = false;
+      });
   }
 
   function refreshAnalytics() {
+    if (isAnalyticsLoading) return;
+    isAnalyticsLoading = true;
     fetch("/api/dashboard/analytics", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((a) => {
@@ -213,17 +223,26 @@
 
         renderHeatmap(a.heatmap);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        isAnalyticsLoading = false;
+      });
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refreshSummary();
+      refreshAnalytics();
+    }, 150);
   }
 
   // initial load
+  refreshSummary();
   refreshAnalytics();
 
   if (window.HR_LIVE) {
-    window.HR_LIVE.onGlobalChange(() => {
-      refreshSummary();
-      refreshAnalytics();
-    });
+    window.HR_LIVE.onGlobalChange(() => scheduleRefresh());
   }
 })();
 

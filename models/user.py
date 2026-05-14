@@ -1,6 +1,10 @@
 from database import db
 
 class User(db.Model):
+    __table_args__ = (
+        db.Index("ix_user_role_locked", "role", "is_locked"),
+        db.Index("ix_user_full_name", "full_name"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 

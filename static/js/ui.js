@@ -267,6 +267,8 @@
       "Added comment (subtask)": "Đã thêm bình luận (công việc con)",
       "Created issue (subtask)": "Đã tạo sự cố (công việc con)",
       "Uploaded file (subtask)": "Đã tải tệp lên (công việc con)",
+      "Remember me": "Ghi nhớ đăng nhập",
+      "Username or Email": "Tên đăng nhập hoặc Email",
     },
   };
 
@@ -470,25 +472,54 @@
     return div.innerHTML;
   }
 
+  const notificationState = {
+    unread_count: Number(qs("#notificationBadge")?.textContent || 0),
+    items: [],
+  };
+
+  function normalizeNotificationState(data) {
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    const deduped = [];
+    const seen = new Set();
+    items.forEach((item) => {
+      const id = Number(item && item.id);
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      deduped.push(item);
+    });
+    return {
+      unread_count: Number(data && data.unread_count ? data.unread_count : 0),
+      items: deduped,
+    };
+  }
+
+  function setNotificationState(data) {
+    const next = normalizeNotificationState(data);
+    notificationState.unread_count = next.unread_count;
+    notificationState.items = next.items;
+    return next;
+  }
+
   function renderNotifications(data) {
     const menu = qs("#notificationMenu");
     if (!menu || !data) return;
+    const state = setNotificationState(data);
     let badge = qs("#notificationBadge");
     const toggle = qs("#notificationDropdown");
-    if (data.unread_count > 0 && toggle && !badge) {
+    if (state.unread_count > 0 && toggle && !badge) {
       badge = document.createElement("span");
       badge.id = "notificationBadge";
       badge.className = "position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger";
       toggle.appendChild(badge);
     }
     if (badge) {
-      if (data.unread_count > 0) badge.textContent = data.unread_count;
+      if (state.unread_count > 0) badge.textContent = state.unread_count;
       else badge.remove();
     }
 
     const header = menu.querySelector(".border-bottom");
     let deleteAllBtn = qs("[data-notifications-delete-all]", menu);
-    if (data.items && data.items.length > 0 && !deleteAllBtn && header) {
+    if (state.items && state.items.length > 0 && !deleteAllBtn && header) {
       deleteAllBtn = document.createElement("button");
       deleteAllBtn.className = "btn btn-link btn-sm p-0 text-decoration-none text-danger";
       deleteAllBtn.type = "button";
@@ -496,13 +527,13 @@
       deleteAllBtn.setAttribute("data-i18n", "Delete all");
       deleteAllBtn.textContent = tr("Delete all");
       header.appendChild(deleteAllBtn);
-    } else if ((!data.items || data.items.length === 0) && deleteAllBtn) {
+    } else if ((!state.items || state.items.length === 0) && deleteAllBtn) {
       deleteAllBtn.remove();
     }
 
-    const body = data.items && data.items.length
+    const body = state.items && state.items.length
       ? '<div class="notification-list" id="notificationList">' +
-        data.items.map((item) => (
+        state.items.map((item) => (
           '<a href="' + escapeHtml(item.url || "#") + '" class="dropdown-item notification-item ' + (!item.is_read ? "is-unread" : "") + '" data-notification-id="' + item.id + '">' +
           '<div class="d-flex justify-content-between gap-2">' +
           '<div class="fw-semibold text-wrap">' + escapeHtml(tr(item.title)) + '</div>' +
@@ -521,19 +552,36 @@
     applyI18n(menu);
   }
 
-  function refreshNotifications({ showToast } = {}) {
+  function applyNotificationResponse(response) {
+    if (response && typeof response.unread_count === "number") {
+      renderNotifications(response);
+    }
+  }
+
+  function refreshNotifications() {
     if (!qs("#notificationMenu")) return Promise.resolve();
     return fetch("/api/notifications", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
-        const previous = Number(qs("#notificationBadge")?.textContent || 0);
         renderNotifications(data);
-        if (showToast && data.unread_count > previous && data.items && data.items[0]) {
-          toast(data.items[0].message, { title: data.items[0].title, variant: "info" });
-        }
       })
       .catch(() => {});
+  }
+
+  function insertIncomingNotification(payload) {
+    const notification = payload && payload.notification ? payload.notification : null;
+    if (!notification || !notification.id) return;
+    const existing = notificationState.items.filter((item) => Number(item.id) !== Number(notification.id));
+    notificationState.items = [notification].concat(existing).slice(0, 8);
+    notificationState.unread_count =
+      typeof payload.unread_count === "number"
+        ? payload.unread_count
+        : notificationState.items.filter((item) => !item.is_read).length;
+    renderNotifications(notificationState);
+    if (document.visibilityState === "visible") {
+      toast(notification.message, { title: notification.title, variant: "info" });
+    }
   }
 
   // Delete all notifications
@@ -548,12 +596,10 @@
           "Content-Type": "application/json",
         },
         body: "{}",
-      }).then((r) => {
-        if (!r.ok) return;
-        qs("#notificationBadge")?.remove();
-        deleteAllBtn.remove();
-        refreshNotifications();
-      });
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => applyNotificationResponse(data))
+        .catch(() => {});
     }
   });
 
@@ -577,12 +623,9 @@
           "Content-Type": "application/json",
         },
         body: "{}",
-      }).then((r) => {
-        if (r.ok) {
-          item.classList.remove("is-unread");
-          refreshNotifications();
-        }
-      }).catch(() => {})
+      }).then((r) => (r.ok ? r.json() : null))
+      .then((data) => applyNotificationResponse(data))
+      .catch(() => {})
       .finally(() => {
         // Navigate AFTER marking as read
         window.location.href = href;
@@ -598,19 +641,31 @@
           "Content-Type": "application/json",
         },
         body: "{}",
-      }).then((r) => {
-        if (r.ok) {
-          item.classList.remove("is-unread");
-          refreshNotifications();
-        }
-      }).catch(() => {});
+      }).then((r) => (r.ok ? r.json() : null))
+      .then((data) => applyNotificationResponse(data))
+      .catch(() => {});
     }
     // If already read, let navigation happen naturally
   });
 
   if (window.HR_LIVE) {
-    window.HR_LIVE.onGlobalChange(() => refreshNotifications({ showToast: true }));
+    window.HR_LIVE.onNotification((evt) => {
+      if (!evt || !evt.type) return;
+      if (evt.type === "sync") {
+        applyNotificationResponse(evt.payload);
+        return;
+      }
+      if (evt.type === "new") {
+        insertIncomingNotification(evt.payload);
+      }
+    });
   }
+
+  window.addEventListener("hr:socket_connected", () => {
+    refreshNotifications();
+  });
+
+  refreshNotifications();
 
   const guideEl = qs("#userGuideModal");
   if (guideEl && window.bootstrap) {

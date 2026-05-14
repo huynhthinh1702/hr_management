@@ -4,6 +4,12 @@ from database import db
 
 
 class ActivityLog(db.Model):
+    __table_args__ = (
+        db.Index("ix_activity_task_subtask_created", "task_id", "subtask_id", "created_at"),
+        db.Index("ix_activity_task_action_created", "task_id", "action", "created_at"),
+        db.Index("ix_activity_user_created", "user_id", "created_at"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(120), nullable=False)
     details = db.Column(db.Text, nullable=False)

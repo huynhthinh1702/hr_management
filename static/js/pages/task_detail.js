@@ -550,16 +550,20 @@
   }
 
   // Realtime socket with error boundary
-  if (window.io) {
+  if (window.HR_LIVE && window.HR_LIVE.socket) {
     try {
-      var socket = io({ transports: ["websocket", "polling"] });
-      socket.on("connect", function () {
+      var socket = window.HR_LIVE.socket;
+      function joinTaskRoom() {
         try {
           socket.emit("join_task", { task_id: TASK_ID });
         } catch (e) {
           console.warn("socket join_task error:", e);
         }
+      }
+      socket.on("connect", function () {
+        joinTaskRoom();
       });
+      if (socket.connected) joinTaskRoom();
       socket.on("task_live_update", function (msg) {
         try {
           if (msg && msg.task_id === TASK_ID) scheduleRefresh(msg.sections);

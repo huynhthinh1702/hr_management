@@ -446,16 +446,20 @@
   });
 
   // Realtime: listen to parent task updates and refresh this subtask sections.
-  if (window.io && TASK_ID) {
+  if (window.HR_LIVE && window.HR_LIVE.socket && TASK_ID) {
     try {
-      var socket = io({ transports: ["websocket", "polling"] });
-      socket.on("connect", function () {
+      var socket = window.HR_LIVE.socket;
+      function joinTaskRoom() {
         try {
           socket.emit("join_task", { task_id: TASK_ID });
         } catch (e) {
           console.warn("subtask socket connect error:", e);
         }
+      }
+      socket.on("connect", function () {
+        joinTaskRoom();
       });
+      if (socket.connected) joinTaskRoom();
       socket.on("task_live_update", function (msg) {
         try {
           if (msg && msg.task_id === TASK_ID) scheduleRefresh(["subtask", "comments", "issues", "attachments", "activities"]);

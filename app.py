@@ -1,9 +1,10 @@
 import os
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
 from sqlalchemy import func, inspect, or_, text
@@ -19,6 +20,16 @@ from services.realtime import (
     join_task_room,
     leave_task_room,
 )
+from services.cache import set_if_absent
+from services.dashboard_service import build_dashboard_analytics, build_dashboard_summary, invalidate_dashboard_cache
+from services.notification_service import (
+    create_notification,
+    emit_notification_created,
+    emit_notification_sync,
+    get_notification_summary,
+    serialize_notification_summary,
+)
+from services.security import init_limiter
 
 from models.user import ROLE_HIERARCHY
 from database import db
@@ -32,11 +43,27 @@ from models.task_attachment import TaskAttachment
 from models.user import User
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.secret_key = os.getenv("SECRET_KEY", "secret123")
+app.permanent_session_lifetime = timedelta(days=int(os.getenv("PERMANENT_SESSION_DAYS", "7")))
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "0") == "1"
+app.config["SESSION_REFRESH_EACH_REQUEST"] = False
+app.config["PREFERRED_URL_SCHEME"] = "https" if app.config["SESSION_COOKIE_SECURE"] else "http"
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:123@localhost/hr_management'
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:123456@db:5432/hr_management",
+)
 app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
+    "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+    "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+}
 
 ALLOWED_EXTENSIONS = {
     "png", "jpg", "jpeg", "gif", "pdf", "doc", "docx", "xls", "xlsx", "txt", "zip"
@@ -52,6 +79,7 @@ db.init_app(app)
 migrate = Migrate(app, db)
 
 csrf = CSRFProtect(app)
+limiter = init_limiter(app)
 
 socketio = init_socketio(app)
 
@@ -338,6 +366,18 @@ def notify_task_removed(task_id):
 
 
 def notify_global_change(kind="data_changed", task_id=None):
+    if kind in {
+        "data_changed",
+        "task_created",
+        "task_updated",
+        "task_deleted",
+        "issue_created",
+        "issue_resolved",
+        "subtask_created",
+        "subtask_updated",
+        "notification_created",
+    }:
+        invalidate_dashboard_cache()
     emit_global(socketio, kind=kind, task_id=task_id)
 
 
@@ -551,9 +591,54 @@ def serialize_subtask_live(subtask_id, sections=None, activity_page=1):
 
 
 def get_current_user():
+    if hasattr(g, "current_user"):
+        return g.current_user
     if "user_id" not in session:
         return None
     return User.query.get(session["user_id"])
+
+
+def sync_authenticated_session(user):
+    session["user_id"] = user.id
+    session["username"] = user.username
+    session["role"] = user.role
+
+
+def maybe_emit_overdue_notifications(user):
+    if not user:
+        return
+    today = datetime.now(VN_TZ).date()
+    throttle_key = f"hr:overdue-check:{user.id}:{today.isoformat()}:{datetime.now(VN_TZ).hour}"
+    if not set_if_absent(throttle_key, "1", ex=3600):
+        return
+
+    created_notifications = notify_overdue_tasks_for_user(user)
+    if not created_notifications:
+        db.session.rollback()
+        return
+
+    db.session.commit()
+    for notification in created_notifications:
+        emit_notification_created(socketio, notification, fmt_vn)
+
+
+@app.before_request
+def load_authenticated_user():
+    g.current_user = None
+    user_id = session.get("user_id")
+    if not user_id:
+        return
+
+    user = User.query.get(user_id)
+    if not user or user.is_locked:
+        session.clear()
+        return
+
+    g.current_user = user
+    if session.get("username") != user.username or session.get("role") != user.role:
+        sync_authenticated_session(user)
+    session.permanent = bool(session.get("remember_me", session.permanent))
+    maybe_emit_overdue_notifications(user)
 
 
 def display_user_name(user):
@@ -562,45 +647,25 @@ def display_user_name(user):
     return user.full_name or user.username
 
 
-def create_notification(user_id, type_, title, message, task_id=None, url=None, actor_id=None, dedupe=False):
-    if not user_id:
-        return None
-    if dedupe:
-        exists = Notification.query.filter_by(
-            user_id=user_id,
-            type=type_,
-            task_id=task_id,
-        ).first()
-        if exists:
-            return exists
-    notification = Notification(
-        user_id=user_id,
-        actor_id=actor_id,
-        task_id=task_id,
-        type=type_,
-        title=title,
-        message=message,
-        url=url,
-    )
-    db.session.add(notification)
-    return notification
-
-
 def notify_task_assigned(task, users):
     actor_id = session.get("user_id")
+    created = []
     for user in users:
         if user.id == actor_id:
             continue
-        create_notification(
-            user.id,
-            "task_assigned",
-            translate_ui("Task assigned"),
-            translate_ui("You were assigned to '{task.title}'.").format(task=task),
+        notification = create_notification(
+            user_id=user.id,
+            type_="task_assigned",
+            title=translate_ui("Task assigned"),
+            message=translate_ui("You were assigned to '{task.title}'.").format(task=task),
             task_id=task.id,
             url=f"/task/{task.id}",
             actor_id=actor_id,
             dedupe=True,
         )
+        if notification:
+            created.append(notification)
+    return created
 
 
 def notify_task_completed(task):
@@ -610,17 +675,21 @@ def notify_task_completed(task):
         recipient_ids.discard(actor_id)
     managers = User.query.filter(User.role.in_(["manager", "admin"])).all()
     recipient_ids.update(u.id for u in managers if u.id != actor_id)
+    created = []
     for user_id in recipient_ids:
-        create_notification(
-            user_id,
-            "task_completed",
-            translate_ui("Task completed"),
-            translate_ui("'{task.title}' was marked completed.").format(task=task),
+        notification = create_notification(
+            user_id=user_id,
+            type_="task_completed",
+            title=translate_ui("Task completed"),
+            message=translate_ui("'{task.title}' was marked completed.").format(task=task),
             task_id=task.id,
             url=f"/task/{task.id}",
             actor_id=actor_id,
             dedupe=True,
         )
+        if notification:
+            created.append(notification)
+    return created
 
 
 def notify_serious_issue(task, issue):
@@ -630,22 +699,27 @@ def notify_serious_issue(task, issue):
     recipient_ids.update(u.id for u in managers)
     if actor_id:
         recipient_ids.discard(actor_id)
+    created = []
     for user_id in recipient_ids:
-        create_notification(
-            user_id,
-            "serious_issue",
-            translate_ui("Serious issue created"),
-            f"{translate_ui(issue.severity)} issue on '{task.title}': {issue.title}",
+        notification = create_notification(
+            user_id=user_id,
+            type_="serious_issue",
+            title=translate_ui("Serious issue created"),
+            message=f"{translate_ui(issue.severity)} issue on '{task.title}': {issue.title}",
             task_id=task.id,
             url=f"/task/{task.id}",
             actor_id=actor_id,
         )
+        if notification:
+            created.append(notification)
+    return created
 
 
 def notify_overdue_tasks_for_user(user):
     if not user:
-        return
+        return []
     today = datetime.now(VN_TZ).date()
+    created = []
     if user.role in ["manager", "admin"]:
         tasks = Task.query.filter_by(is_deleted=False).options(selectinload(Task.assigned_users)).all()
     else:
@@ -658,39 +732,18 @@ def notify_overdue_tasks_for_user(user):
         )
     for task in tasks:
         if is_overdue_task(task, today=today):
-            create_notification(
-                user.id,
-                "task_overdue",
-                translate_ui("Task overdue"),
-                translate_ui("'{task.title}' is past its deadline ({task.deadline}).").format(task=task),
+            notification = create_notification(
+                user_id=user.id,
+                type_="task_overdue",
+                title=translate_ui("Task overdue"),
+                message=translate_ui("'{task.title}' is past its deadline ({task.deadline}).").format(task=task),
                 task_id=task.id,
                 url=f"/task/{task.id}",
                 dedupe=True,
             )
-
-
-def get_notification_summary(user_id):
-    if not user_id:
-        return {"unread_count": 0, "items": []}
-    unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
-    items = (
-        Notification.query.filter_by(user_id=user_id)
-        .order_by(Notification.created_at.desc())
-        .limit(8)
-        .all()
-    )
-    return {"unread_count": unread_count, "items": items}
-
-
-def serialize_notification(notification):
-    return {
-        "id": notification.id,
-        "title": notification.title,
-        "message": notification.message,
-        "url": notification.url or "#",
-        "is_read": bool(notification.is_read),
-        "created_at": fmt_vn(notification.created_at),
-    }
+            if notification:
+                created.append(notification)
+    return created
 
 def create_default_admin():
 
@@ -756,9 +809,6 @@ def log_subtask_activity(task_id, subtask_id, action, details):
 @app.context_processor
 def inject_global_data():
     current_user = get_current_user()
-    if current_user:
-        notify_overdue_tasks_for_user(current_user)
-        db.session.commit()
     return {
         "current_user": current_user,
         "fmt_vn": fmt_vn,
@@ -786,13 +836,13 @@ def scoped_task_query():
     current_user_id = session.get("user_id")
     current_role = session.get("role")
 
-    # admin/director thấy toàn bộ
+    # admin/director tháº¥y toÃ n bá»™
     if current_role in ["admin", "director"]:
         return base_query
 
-    # các role khác:
-    # chỉ thấy task được assign
-    # hoặc task do chính họ tạo
+    # cÃ¡c role khÃ¡c:
+    # chá»‰ tháº¥y task Ä‘Æ°á»£c assign
+    # hoáº·c task do chÃ­nh há» táº¡o
 
     return base_query.filter(
         or_(
@@ -893,178 +943,31 @@ def api_subtask_live(subtask_id):
 
 
 @app.route("/api/dashboard/summary", methods=["GET"])
+@limiter.limit("120 per minute")
 def api_dashboard_summary():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
-    
-    current_user_id = session["user_id"]
-    
-    # TASKS
 
-    tasks = scoped_task_query().all()
-    total_tasks = len(tasks)
-    completed_tasks = sum(1 for t in tasks if t.status == "Completed")
-    pending_tasks = total_tasks - completed_tasks
-
-    # SUBTASKS (only active ones, parent task not deleted)
-
-    subtasks = SubTask.query.filter(
-        SubTask.assigned_users.any(User.id == current_user_id)
-    ).all()
-    subtasks = [s for s in subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
-
-    subtask_total = len(subtasks)
-    subtask_completed = sum(1 for s in subtasks if s.status == "Completed")
-    subtask_pending = subtask_total - subtask_completed
-
-    # FINAL TASK COUNTS
-
-    total_tasks = total_tasks + subtask_total
-    completed_tasks = completed_tasks + subtask_completed
-    pending_tasks = pending_tasks + subtask_pending
-
-    # ISSUES (only from existing tasks/subtasks, exclude orphaned)
-
-    task_ids = [t.id for t in tasks]
-    subtask_ids = [s.id for s in subtasks]
-    if task_ids or subtask_ids:
-        issue_query = Issue.query.filter(
-            db.or_(
-                Issue.task_id.in_(task_ids) if task_ids else False,
-                Issue.subtask_id.in_(subtask_ids) if subtask_ids else False  
-            )
-        )
-        total_issues = issue_query.count()
-        resolved_issues = issue_query.filter(
-            Issue.status == "Resolved"
-        ).count()
-        recent_issues = (
-            issue_query.order_by(Issue.created_at.desc())
-            .limit(6)
-            .all()
-        )
-    else:
-        total_issues = 0
-        resolved_issues = 0
-        recent_issues = []
-
-    unresolved_issues = total_issues - resolved_issues
-    issue_resolution_rate = int((resolved_issues / total_issues) * 100) if total_issues else 0
-
-    return jsonify({
-        "total_tasks": total_tasks,
-        "completed_tasks": completed_tasks,
-        "pending_tasks": pending_tasks,
-        "total_issues": total_issues,
-        "resolved_issues": resolved_issues,
-        "unresolved_issues": unresolved_issues,
-        "issue_resolution_rate": issue_resolution_rate,
-        "recent_issues": [
-            {
-                "id": i.id,
-                "title": i.title,
-                "status": i.status,
-                "creator_name": i.creator_name,
-            }
-            for i in recent_issues
-        ]
-    })
+    return jsonify(build_dashboard_summary(scoped_task_query(), session["user_id"]))
 
 
 @app.route("/api/dashboard/analytics", methods=["GET"])
+@limiter.limit("60 per minute")
 def api_dashboard_analytics():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
 
-    tasks = scoped_task_query().options(selectinload(Task.assigned_users)).all()
-    today_date = datetime.now(VN_TZ).date()
-    total = len(tasks)
-    overdue = sum(1 for t in tasks if is_overdue_task(t, today=today_date))
-    overdue_rate = int((overdue / total) * 100) if total else 0
-
-    # Also fetch all subtasks to include subtask assignee productivity
-    all_subtasks = SubTask.query.all()
-    active_subtasks = [s for s in all_subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
-
-    # Productivity by employee (assigned tasks completed)
-    prod = {}
-    for t in tasks:
-        for u in (t.assigned_users or []):
-            label = display_user_name(u)
-            prod.setdefault(label, {"username": label, "completed": 0, "total": 0})
-            prod[label]["total"] += 1
-            if t.status == "Completed":
-                prod[label]["completed"] += 1
-
-    # Also count subtask assignee productivity
-    for s in active_subtasks:
-        for u in (s.assigned_users or []):
-            label = display_user_name(u)
-            prod.setdefault(label, {"username": label, "completed": 0, "total": 0})
-            prod[label]["total"] += 1
-            if s.status == "Completed":
-                prod[label]["completed"] += 1
-
-    productivity = sorted(prod.values(), key=lambda x: (-x["completed"], -x["total"], x["username"]))[:12]
-
-    # Task trend by day (based on ActivityLog)
-    task_ids = [t.id for t in tasks]
-    if task_ids:
-        created_logs = ActivityLog.query.filter(
-            ActivityLog.task_id.in_(task_ids),
-            ActivityLog.action == "Created task",
-        ).all()
-        moved_logs = ActivityLog.query.filter(
-            ActivityLog.task_id.in_(task_ids),
-            ActivityLog.action.in_(["Updated task", "Moved task on kanban"]),
-        ).all()
-    else:
-        created_logs = []
-        moved_logs = []
-
-    def day_key(dt):
-        return dt.strftime("%Y-%m-%d")
-
-    created_per_day = {}
-    completed_per_day = {}
-    for log in created_logs:
-        k = day_key(log.created_at)
-        created_per_day[k] = created_per_day.get(k, 0) + 1
-    for log in moved_logs:
-        if "Completed" in (log.details or ""):
-            k = day_key(log.created_at)
-            completed_per_day[k] = completed_per_day.get(k, 0) + 1
-
-    all_days = sorted(set(created_per_day.keys()) | set(completed_per_day.keys()))
-    trend = {
-        "labels": all_days[-30:],
-        "created": [created_per_day.get(d, 0) for d in all_days[-30:]],
-        "completed": [completed_per_day.get(d, 0) for d in all_days[-30:]],
-    }
-
-    # Heatmap: activities count by weekday and hour
-    heat = [[0 for _ in range(24)] for _ in range(7)]
-    logs = []
-    if task_ids:
-        logs = ActivityLog.query.filter(ActivityLog.task_id.in_(task_ids)).all()
-    for log in logs:
-        wd = int(log.created_at.strftime("%w"))  # 0=Sun..6=Sat
-        hr = int(log.created_at.strftime("%H"))
-        heat[wd][hr] += 1
-
-    return jsonify({
-        "overdue": {"count": overdue, "total": total, "rate": overdue_rate},
-        "productivity": productivity,
-        "trend": trend,
-        "heatmap": {
-            "weekday_labels": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-            "hours": list(range(24)),
-            "matrix": heat,
-        },
-    })
+    return jsonify(
+        build_dashboard_analytics(
+            scoped_task_query(),
+            session["user_id"],
+            datetime.now(VN_TZ).date(),
+        )
+    )
 
 
 @app.route("/api/kanban/columns", methods=["GET"])
+@limiter.limit("120 per minute")
 def api_kanban_columns():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
@@ -1105,6 +1008,7 @@ def api_kanban_columns():
 
 
 @app.route("/api/tasks/table", methods=["GET"])
+@limiter.limit("120 per minute")
 def api_tasks_table():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
@@ -1166,22 +1070,21 @@ def api_tasks_table():
     # Also fetch subtasks assigned to current user (matching server-side /tasks behavior)
     # IMPORTANT: exclude subtasks whose parent task is deleted (archived)
     current_user_id = session.get("user_id")
-    assigned_subtasks = SubTask.query.filter(
-        or_(
-            SubTask.assigned_users.any(User.id == current_user_id),
-            SubTask.created_by == current_user_id
+    assigned_subtasks = (
+        SubTask.query.join(Task, Task.id == SubTask.task_id)
+        .filter(
+            Task.is_deleted.is_(False),
+            or_(
+                SubTask.assigned_users.any(User.id == current_user_id),
+                SubTask.created_by == current_user_id
+            ),
         )
-    ).all()
-    active_subtask_ids = []
-    for s in assigned_subtasks:
-        pt = Task.query.get(s.task_id)
-        if pt and not pt.is_deleted:
-            active_subtask_ids.append(s.id)
-    assigned_subtasks = [s for s in assigned_subtasks if s.id in active_subtask_ids]
+        .options(selectinload(SubTask.assigned_users))
+        .all()
+    )
 
     subtask_rows = []
     for s in assigned_subtasks:
-        parent_task = Task.query.get(s.task_id)
         assigned_users_list = s.assigned_users or []
         first_assigned = assigned_users_list[0] if assigned_users_list else None
         subtask_rows.append({
@@ -1214,6 +1117,8 @@ def api_tasks_table():
 
 @app.route("/")
 def home():
+    if get_current_user():
+        return redirect(url_for("dashboard"))
     return render_template("index.html")
 
 
@@ -1228,17 +1133,15 @@ def set_language(lang):
 
 
 @app.route("/api/notifications", methods=["GET"])
+@limiter.limit("120 per minute")
 def api_notifications():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
-    summary = get_notification_summary(session["user_id"])
-    return jsonify({
-        "unread_count": summary["unread_count"],
-        "items": [serialize_notification(item) for item in summary["items"]],
-    })
+    return jsonify(serialize_notification_summary(session["user_id"], fmt_vn))
 
-# Đăng ký
+# ÄÄƒng kÃ½
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("10 per hour", methods=["POST"])
 def register():
     if request.method == "POST":
         full_name = request.form.get("full_name", "").strip()
@@ -1272,28 +1175,42 @@ def register():
         return redirect("/login")
     return render_template("register.html")
 
-# Đăng nhập
+# ÄÄƒng nháº­p
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
 def login():
+    if request.method == "GET" and get_current_user():
+        return redirect(url_for("dashboard"))
+
     if request.method == "POST":
-        email = request.form["email"]
+        login_input = request.form["login"].strip()
         password = request.form["password"]
-        user = User.query.filter_by(email=email).first()
+        remember = bool(request.form.get("remember"))
+        user = User.query.filter(
+            db.or_(
+               func.lower(User.username) == login_input.lower(),
+               func.lower(User.email) == login_input.lower()
+            )
+        ).first()
 
         if user and check_password_hash(user.password, password):
             if user.is_locked:
                 return render_template("login.html", login_error="locked")
-            session["user_id"] = user.id
-            session["username"] = user.username
-            session["role"] = user.role
+            current_lang = current_language()
+            session.clear()
+            session["lang"] = current_lang
+            session.permanent = remember
+            session["remember_me"] = remember
+            sync_authenticated_session(user)
 
-            return redirect("/dashboard")
+            return redirect(url_for("dashboard"))
         return render_template("login.html", login_error="invalid")
 
     return render_template("login.html")
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("3 per 15 minute", methods=["POST"])
 def forgot_password():
     if request.method == "POST":
         full_name = request.form.get("full_name", "").strip()
@@ -1305,24 +1222,28 @@ def forgot_password():
             return render_template("forgot_password.html")
 
         admins = User.query.filter_by(role="admin").all()
+        created_notifications = []
         for admin_user in admins:
-            create_notification(
-                admin_user.id,
-                "password_reset_request",
-                translate_ui("Password reset request"),
-                f"{user.full_name or user.username} ({user.email}) {translate_ui('requested a reset to the default password.')}",
+            notification = create_notification(
+                user_id=admin_user.id,
+                type_="password_reset_request",
+                title=translate_ui("Password reset request"),
+                message=f"{user.full_name or user.username} ({user.email}) {translate_ui('requested a reset to the default password.')}",
                 url="/admin/users",
                 actor_id=user.id,
             )
+            if notification:
+                created_notifications.append(notification)
         db.session.commit()
-        notify_global_change(kind="notification_created")
+        for notification in created_notifications:
+            emit_notification_created(socketio, notification, fmt_vn)
         flash("Password reset request sent to admin.")
         return redirect("/login")
 
     return render_template("forgot_password.html")
 
 
-# Đăng xuất
+# ÄÄƒng xuáº¥t
 @app.route("/logout")
 def logout():
     session.clear()
@@ -1335,97 +1256,18 @@ def dashboard():
 
     if "user_id" not in session:
         return redirect("/login")
-
-    current_user_id = session["user_id"]
-
-    # TASKS
-
-    tasks = scoped_task_query().options(
-        selectinload(Task.assigned_users)
-    ).all()
-
-    task_total = len(tasks)
-
-    task_completed = sum(
-        1 for t in tasks
-        if t.status == "Completed"
-    )
-
-    task_pending = task_total - task_completed
-
-    # SUBTASKS (only active ones, parent task not deleted)
-
-    subtasks = SubTask.query.filter(
-        db.or_(
-            SubTask.assigned_users.any(User.id == current_user_id),
-            SubTask.created_by == current_user_id
-        )
-    ).all()
-    subtasks = [s for s in subtasks if Task.query.get(s.task_id) and not Task.query.get(s.task_id).is_deleted]
-
-    subtask_total = len(subtasks)
-
-    subtask_completed = sum(
-        1 for s in subtasks
-        if s.status == "Completed"
-    )
-
-    subtask_pending = subtask_total - subtask_completed
-
-    # FINAL COUNTS
-
-    total_tasks = task_total + subtask_total
-    completed_tasks = task_completed + subtask_completed
-    pending_tasks = task_pending + subtask_pending
-
-    # ISSUES (only from existing tasks/subtasks, exclude orphaned)
-
-    task_ids = [t.id for t in tasks]
-    subtask_ids = [s.id for s in subtasks]
-
-    if task_ids or subtask_ids:
-        issue_query = Issue.query.filter(
-            db.or_(
-                Issue.task_id.in_(task_ids) if task_ids else False,
-                Issue.subtask_id.in_(subtask_ids) if subtask_ids else False
-            )
-        )
-
-        total_issues = issue_query.count()
-
-        resolved_issues = issue_query.filter(
-            Issue.status == "Resolved"
-        ).count()
-
-        recent_issues = (
-            issue_query
-            .order_by(Issue.created_at.desc())
-            .limit(6)
-            .all()
-        )
-        # Also filter recent issues: exclude issues belonging to deleted subtasks
-        recent_issues = [i for i in recent_issues if not i.subtask_id or (SubTask.query.get(i.subtask_id) is not None and Task.query.get(i.task_id) and not Task.query.get(i.task_id).is_deleted)]
-    else:
-        total_issues = 0
-        resolved_issues = 0
-        recent_issues = []
-
-    unresolved_issues = total_issues - resolved_issues
-    issue_resolution_rate = (
-        int((resolved_issues / total_issues) * 100)
-        if total_issues else 0
-    )
+    summary = build_dashboard_summary(scoped_task_query(), session["user_id"])
 
     return render_template(
         "dashboard.html",
-        total_tasks=total_tasks,
-        completed_tasks=completed_tasks,
-        pending_tasks=pending_tasks,
-        total_issues=total_issues,
-        resolved_issues=resolved_issues,
-        unresolved_issues=unresolved_issues,
-        issue_resolution_rate=issue_resolution_rate,
-        recent_issues=recent_issues
+        total_tasks=summary["total_tasks"],
+        completed_tasks=summary["completed_tasks"],
+        pending_tasks=summary["pending_tasks"],
+        total_issues=summary["total_issues"],
+        resolved_issues=summary["resolved_issues"],
+        unresolved_issues=summary["unresolved_issues"],
+        issue_resolution_rate=summary["issue_resolution_rate"],
+        recent_issues=summary["recent_issues"],
     )
 
 
@@ -1549,7 +1391,7 @@ def admin_delete_user(user_id):
     flash("User deleted.")
     return redirect("/admin/users")
 
-# Tạo task
+# Táº¡o task
 @app.route("/create-task", methods=["GET", "POST"])
 def create_task():
     if "user_id" not in session:
@@ -1582,13 +1424,16 @@ def create_task():
 
         db.session.add(new_task)
         db.session.flush()
-        notify_task_assigned(new_task, users)
+        created_notifications = notify_task_assigned(new_task, users)
         log_activity(
             task_id=new_task.id,
             action=translate_ui("Created task"),
             details=f"{translate_ui('Task')} '{new_task.title}' {translate_ui('created')}"
         )
         db.session.commit()
+        for notification in created_notifications:
+            emit_notification_created(socketio, notification, fmt_vn)
+        invalidate_dashboard_cache()
         notify_task_live(new_task.id)
         notify_global_change(kind="task_created", task_id=new_task.id)
 
@@ -1709,9 +1554,13 @@ def create_issue(task_id):
     db.session.add(issue)
     log_activity(task_id, translate_ui("Created issue"), title)
     task = Task.query.get(task_id)
+    created_notifications = []
     if task and severity in ["High", "Critical"]:
-        notify_serious_issue(task, issue)
+        created_notifications = notify_serious_issue(task, issue)
     db.session.commit()
+    for notification in created_notifications:
+        emit_notification_created(socketio, notification, fmt_vn)
+    invalidate_dashboard_cache()
     sections = ["issues", "activities"]
     notify_task_live(task_id, sections=sections)
     notify_global_change(kind="task_updated", task_id=task_id)
@@ -1933,7 +1782,7 @@ def update_password():
     return redirect("/profile")
 
 
-# tạo subtask
+# táº¡o subtask
 @app.route("/create-subtask/<int:task_id>", methods=["GET", "POST"])
 def create_subtask(task_id):
     if "user_id" not in session:
@@ -2219,7 +2068,7 @@ def update_subtask(id):
 
     return render_template("update_subtask.html", subtask=subtask)
 
-# Xóa subtask
+# XÃ³a subtask
 @app.route("/delete-subtask/<int:id>", methods=["POST"])
 def delete_subtask(id):
     if "user_id" not in session:
@@ -2302,9 +2151,13 @@ def update_task(id):
         task.progress = int(request.form["progress"])
 
         log_activity(task.id, translate_ui("Updated task"), f"{translate_ui('Status')}: {translate_ui(task.status)}, {translate_ui('Progress')}: {task.progress}%")
+        created_notifications = []
         if old_status != "Completed" and task.status == "Completed":
-            notify_task_completed(task)
+            created_notifications = notify_task_completed(task)
         db.session.commit()
+        for notification in created_notifications:
+            emit_notification_created(socketio, notification, fmt_vn)
+        invalidate_dashboard_cache()
         notify_task_live(task.id)
         notify_global_change(kind="task_updated", task_id=task.id)
 
@@ -2313,7 +2166,7 @@ def update_task(id):
     return render_template("update_task.html", task=task)
 
 
-# Xóa task
+# XÃ³a task
 @app.route("/delete-task/<int:id>", methods=["POST"])
 def delete_task(id):
 
@@ -2423,7 +2276,7 @@ def reject_delete(id):
     notify_task_live(task.id)
     return redirect(f"/task/{task.id}")
 
-# Lưu trữ task
+# LÆ°u trá»¯ task
 @app.route("/archived-tasks")
 def archive_task():
     if "user_id" not in session:
@@ -2441,7 +2294,7 @@ def archive_task():
         tasks=tasks
     )
 
-# Xóa task trong lưu trữ
+# XÃ³a task trong lÆ°u trá»¯
 @app.route("/permanently-delete-task/<int:id>", methods=["POST"])
 def permanently_delete_task(id):
     if "user_id" not in session:
@@ -2455,7 +2308,7 @@ def permanently_delete_task(id):
     if not task or not task.is_deleted:
         return redirect("/archived-tasks")
 
-    # Xóa toàn bộ dữ liệu liên quan
+    # XÃ³a toÃ n bá»™ dá»¯ liá»‡u liÃªn quan
     Comment.query.filter_by(task_id=task.id).delete()
     Issue.query.filter_by(task_id=task.id).delete()
     ActivityLog.query.filter_by(task_id=task.id).delete()
@@ -2512,7 +2365,7 @@ def kanban():
         completed_tasks=completed_tasks
     )
 
-# cập nhật status
+# cáº­p nháº­t status
 @app.route("/update-status/<int:id>", methods=["POST"])
 def update_status(id):
     if "user_id" not in session:
@@ -2534,9 +2387,13 @@ def update_status(id):
         task.progress = 100
 
     log_activity(task.id, translate_ui("Moved task on kanban"), f"{translate_ui('New status')}: {translate_ui(task.status)}")
+    created_notifications = []
     if old_status != "Completed" and task.status == "Completed":
-        notify_task_completed(task)
+        created_notifications = notify_task_completed(task)
     db.session.commit()
+    for notification in created_notifications:
+        emit_notification_created(socketio, notification, fmt_vn)
+    invalidate_dashboard_cache()
     sections = ["task", "activities"]
     notify_task_live(task.id, sections=sections)
     notify_global_change(kind="task_updated", task_id=task.id)
@@ -2549,24 +2406,29 @@ def update_status(id):
 
 
 @app.route("/api/notifications/read", methods=["POST"])
+@limiter.limit("60 per minute")
 def api_notifications_read():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
     Notification.query.filter_by(user_id=session["user_id"], is_read=False).update({"is_read": True})
     db.session.commit()
-    return jsonify({"message": "marked_read"})
+    emit_notification_sync(socketio, session["user_id"], fmt_vn)
+    return jsonify(serialize_notification_summary(session["user_id"], fmt_vn))
 
 
 @app.route("/api/notifications/delete-all", methods=["POST"])
+@limiter.limit("30 per minute")
 def api_notifications_delete_all():
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
     Notification.query.filter_by(user_id=session["user_id"]).delete()
     db.session.commit()
-    return jsonify({"message": "deleted_all"})
+    emit_notification_sync(socketio, session["user_id"], fmt_vn)
+    return jsonify(serialize_notification_summary(session["user_id"], fmt_vn))
 
 
 @app.route("/api/notifications/<int:id>/read", methods=["POST"])
+@limiter.limit("60 per minute")
 def api_notification_read_one(id):
     if "user_id" not in session:
         return jsonify({"error": "unauthorized"}), 401
@@ -2575,7 +2437,8 @@ def api_notification_read_one(id):
         return jsonify({"error": "not found"}), 404
     notification.is_read = True
     db.session.commit()
-    return jsonify({"message": "marked_read"})
+    emit_notification_sync(socketio, session["user_id"], fmt_vn)
+    return jsonify(serialize_notification_summary(session["user_id"], fmt_vn))
 
 
 @app.route("/user-guide/seen", methods=["POST"])
@@ -2594,4 +2457,10 @@ with app.app_context():
     
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(
+        app,
+        debug=os.getenv("FLASK_DEBUG", "0") == "1",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "5000")),
+        allow_unsafe_werkzeug=True,
+    )

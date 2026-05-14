@@ -1,34 +1,9 @@
-// Layout: sidebar collapse (desktop) + active link highlighting
 (function () {
-  const SIDEBAR_ID = "appSidebar";
   const COLLAPSED_KEY = "hr.sidebar.collapsed";
-  let isTransitioning = false;
+  const DESKTOP_QUERY = window.matchMedia("(min-width: 992px)");
+  let transitionTimer = null;
 
-  function qs(sel, root) {
-    return (root || document).querySelector(sel);
-  }
-
-  function applyCollapsed(isCollapsed) {
-    if (isTransitioning) return;
-    isTransitioning = true;
-
-    const html = document.documentElement;
-    // Add transition lock class to prevent reflow jank
-    html.classList.add("sidebar-transitioning");
-    html.classList.toggle("sidebar-collapsed", Boolean(isCollapsed));
-    
-    try {
-      localStorage.setItem(COLLAPSED_KEY, isCollapsed ? "1" : "0");
-    } catch (_) {}
-
-    // Remove lock after transition completes
-    setTimeout(() => {
-      html.classList.remove("sidebar-transitioning");
-      isTransitioning = false;
-    }, 350);
-  }
-
-  function getCollapsed() {
+  function getStoredCollapsed() {
     try {
       return localStorage.getItem(COLLAPSED_KEY) === "1";
     } catch (_) {
@@ -36,26 +11,49 @@
     }
   }
 
-  // On first load, enable transitions after a short delay to prevent flash animation
-  setTimeout(() => {
-    document.documentElement.classList.add("sidebar-ready");
-  }, 50);
+  function storeCollapsed(value) {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, value ? "1" : "0");
+    } catch (_) {}
+  }
 
-  // The collapsed class is already applied inline in base.html <head>,
-  // so we don't need to do it again here.
+  function setTransitioning(active) {
+    document.documentElement.classList.toggle("sidebar-transitioning", Boolean(active));
+    clearTimeout(transitionTimer);
+    if (active) {
+      transitionTimer = setTimeout(() => {
+        document.documentElement.classList.remove("sidebar-transitioning");
+      }, 320);
+    }
+  }
 
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-sidebar-toggle]");
-    if (!btn) return;
-    const mode = btn.getAttribute("data-sidebar-toggle");
-    if (mode !== "collapse") return;
-    applyCollapsed(!document.documentElement.classList.contains("sidebar-collapsed"));
-  });
+  function applyLayoutMode(mode, collapsed, withTransition) {
+    const html = document.documentElement;
+    if (withTransition) setTransitioning(true);
 
-  // Active link styling
+    html.dataset.layoutMode = mode;
+    html.classList.toggle("layout-mobile", mode === "mobile");
+    html.classList.toggle("layout-desktop", mode === "desktop");
+    html.classList.toggle("sidebar-collapsed", mode === "desktop" && Boolean(collapsed));
+
+    if (mode === "desktop") {
+      storeCollapsed(Boolean(collapsed));
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("hr:layoutchange", {
+        detail: { mode: mode, collapsed: mode === "desktop" && Boolean(collapsed) },
+      })
+    );
+  }
+
+  function syncLayout(withTransition) {
+    const isDesktop = DESKTOP_QUERY.matches;
+    applyLayoutMode(isDesktop ? "desktop" : "mobile", isDesktop ? getStoredCollapsed() : false, withTransition);
+  }
+
   function normalizePath(p) {
     if (!p) return "/";
-    // Remove query/hash, trailing slash (except root)
     const path = String(p).split("?")[0].split("#")[0];
     if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
     return path;
@@ -74,6 +72,24 @@
     });
   }
 
+  syncLayout(false);
+  requestAnimationFrame(() => {
+    document.documentElement.classList.add("sidebar-ready");
+  });
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-sidebar-toggle]");
+    if (!btn || btn.getAttribute("data-sidebar-toggle") !== "collapse") return;
+    if (!DESKTOP_QUERY.matches) return;
+    applyLayoutMode("desktop", !document.documentElement.classList.contains("sidebar-collapsed"), true);
+  });
+
+  if (typeof DESKTOP_QUERY.addEventListener === "function") {
+    DESKTOP_QUERY.addEventListener("change", () => syncLayout(true));
+  } else if (typeof DESKTOP_QUERY.addListener === "function") {
+    DESKTOP_QUERY.addListener(() => syncLayout(true));
+  }
+
+  window.addEventListener("resize", () => syncLayout(false), { passive: true });
   markActiveLinks();
 })();
-

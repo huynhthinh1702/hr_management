@@ -4,6 +4,12 @@ from database import db
 
 
 class Issue(db.Model):
+    __table_args__ = (
+        db.Index("ix_issue_task_status_created", "task_id", "status", "created_at"),
+        db.Index("ix_issue_subtask_status_created", "subtask_id", "status", "created_at"),
+        db.Index("ix_issue_created_by_created", "created_by", "created_at"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
