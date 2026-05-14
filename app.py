@@ -54,7 +54,7 @@ app.config["PREFERRED_URL_SCHEME"] = "https" if app.config["SESSION_COOKIE_SECUR
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:123456@db:5432/hr_management",
+    "postgresql://postgres:123@localhost/hr_management",    
 )
 app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -2460,7 +2460,7 @@ if __name__ == "__main__":
     socketio.run(
         app,
         debug=os.getenv("FLASK_DEBUG", "0") == "1",
-        host="0.0.0.0",
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
         port=int(os.getenv("PORT", "5000")),
-        allow_unsafe_werkzeug=True,
+        allow_unsafe_werkzeug=os.getenv("FLASK_DEBUG", "0") == "1",
     )
